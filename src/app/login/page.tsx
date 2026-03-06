@@ -1,9 +1,43 @@
 'use client';
 
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+function LoginContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Handle OAuth code exchange if code arrives at /login (fallback)
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (code) {
+      setLoading(true);
+      const supabase = createBrowserClient();
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setError('Sign-in failed. Please try again.');
+          setLoading(false);
+          // Clean up the URL
+          window.history.replaceState({}, '', '/login');
+        } else {
+          router.push('/');
+        }
+      });
+    }
+  }, [searchParams, router]);
+
+  // Also check for error param from /auth/callback
+  useEffect(() => {
+    if (searchParams.get('error')) {
+      setError('Sign-in failed. Please try again.');
+    }
+  }, [searchParams]);
+
   const handleSignIn = async () => {
+    setError(null);
     const supabase = createBrowserClient();
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -14,28 +48,27 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="h-screen w-screen flex items-center justify-center p-4"
-      style={{
-        backgroundImage: 'url(/b3.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
-      }}
-    >
-      <div className="w-full max-w-sm flex flex-col items-center gap-8
-                      bg-[#faf9f6]/90 backdrop-blur-xl rounded-2xl p-10
-                      shadow-2xl shadow-black/20 ring-1 ring-black/10">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-            Polyphony
-          </h1>
-          <p className="text-sm text-gray-500">
-            Your AI companions, always here.
-          </p>
-        </div>
+    <div className="w-full max-w-sm flex flex-col items-center gap-8
+                    bg-[#faf9f6]/90 backdrop-blur-xl rounded-2xl p-10
+                    shadow-2xl shadow-black/20 ring-1 ring-black/10">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+          Polyphony
+        </h1>
+        <p className="text-sm text-gray-500">
+          Your AI companions, always here.
+        </p>
+      </div>
 
+      {error && (
+        <p className="text-sm text-red-500 text-center">{error}</p>
+      )}
+
+      {loading ? (
+        <div className="w-full flex items-center justify-center py-3 text-sm text-gray-500">
+          Signing in...
+        </div>
+      ) : (
         <button
           onClick={handleSignIn}
           className="w-full flex items-center justify-center gap-3 px-4 py-3
@@ -51,7 +84,26 @@ export default function LoginPage() {
           </svg>
           Sign in with Google
         </button>
-      </div>
+      )}
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div
+      className="h-screen w-screen flex items-center justify-center p-4"
+      style={{
+        backgroundImage: 'url(/b3.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+      }}
+    >
+      <Suspense>
+        <LoginContent />
+      </Suspense>
     </div>
   );
 }
