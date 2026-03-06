@@ -7,6 +7,7 @@ export interface Persona {
   tagline: string | null;
   sort_order: number;
   memory_summary: string | null;
+  is_default: boolean;
   created_at: string;
   // Joined from messages table for sidebar preview
   last_message_content?: string | null;

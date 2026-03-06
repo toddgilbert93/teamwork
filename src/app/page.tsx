@@ -193,7 +193,7 @@ export default function Home() {
         open={!!editingPersona}
         persona={editingPersona}
         onSave={handleUpdatePersona}
-        onDelete={handleDeletePersona}
+        onDelete={editingPersona?.is_default ? undefined : handleDeletePersona}
         onClose={() => setEditingPersona(null)}
       />
 

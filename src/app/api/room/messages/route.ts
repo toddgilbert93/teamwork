@@ -12,6 +12,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('room_messages')
     .select('*, personas(name, emoji, accent_color)')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -50,7 +51,8 @@ export async function DELETE() {
   const { error } = await supabase
     .from('room_messages')
     .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
+    .eq('user_id', user.id)
+    .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows for this user
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

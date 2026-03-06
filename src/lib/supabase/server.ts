@@ -1,7 +1,17 @@
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 export async function createServerClient() {
+  // In skip-auth mode, use the service role key to bypass RLS entirely.
+  // This lets the dev server read/write without an authenticated session.
+  if (process.env.NEXT_PUBLIC_SKIP_AUTH === 'true') {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+
   const cookieStore = await cookies();
 
   return createSupabaseServerClient(

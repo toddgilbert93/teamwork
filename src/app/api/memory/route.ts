@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     .from('personas')
     .select('memory_summary')
     .eq('id', personaId)
+    .eq('user_id', user.id)
     .single();
 
   if (error) {
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       .from('personas')
       .select('memory_summary')
       .eq('id', persona_id)
+      .eq('user_id', user.id)
       .single();
 
     if (personaError) {
@@ -73,6 +75,7 @@ export async function POST(req: Request) {
       .from('messages')
       .select('*')
       .eq('persona_id', persona_id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
     if (messagesError) {
@@ -90,7 +93,8 @@ export async function POST(req: Request) {
     const { error: updateError } = await supabase
       .from('personas')
       .update({ memory_summary: summary })
-      .eq('id', persona_id);
+      .eq('id', persona_id)
+      .eq('user_id', user.id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });

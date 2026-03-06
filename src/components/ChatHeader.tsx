@@ -71,7 +71,7 @@ export function ChatHeader({ persona, onRefreshPersonas }: ChatHeaderProps) {
             onClick={() => setEditingPersona(persona)}
             className="text-sm text-gray-700"
           >
-            Edit Persona
+            {persona.is_default ? 'View Details' : 'Edit Persona'}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setShowMemoryModal(true)}

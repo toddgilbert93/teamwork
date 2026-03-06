@@ -9,13 +9,47 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data, error } = await supabase.rpc('get_personas_with_last_message');
+  // Fetch personas for this user
+  const { data: personas, error } = await supabase
+    .from('personas')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('sort_order', { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  // Fetch last message for each persona
+  const personaIds = (personas || []).map((p: { id: string }) => p.id);
+  const { data: lastMessages } = personaIds.length > 0
+    ? await supabase
+        .from('messages')
+        .select('persona_id, content, created_at, role')
+        .in('persona_id', personaIds)
+        .order('created_at', { ascending: false })
+    : { data: [] };
+
+  // Group by persona_id, take first (most recent) for each
+  const lastMessageMap = new Map<string, { content: string; created_at: string; role: string }>();
+  for (const msg of lastMessages || []) {
+    if (!lastMessageMap.has(msg.persona_id)) {
+      lastMessageMap.set(msg.persona_id, msg);
+    }
+  }
+
+  // Merge into persona objects
+  const result = (personas || []).map((p: Record<string, unknown>) => {
+    const last = lastMessageMap.get(p.id as string);
+    return {
+      ...p,
+      last_message_content: last?.content ?? null,
+      last_message_at: last?.created_at ?? null,
+      last_message_role: last?.role ?? null,
+    };
+  });
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: Request) {
@@ -39,6 +73,7 @@ export async function POST(req: Request) {
   const { data: maxSort } = await supabase
     .from('personas')
     .select('sort_order')
+    .eq('user_id', user.id)
     .order('sort_order', { ascending: false })
     .limit(1)
     .single();

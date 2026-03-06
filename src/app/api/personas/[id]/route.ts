@@ -13,6 +13,22 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Block edits to default personas
+  const { data: existing } = await supabase
+    .from('personas')
+    .select('is_default')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Persona not found' }, { status: 404 });
+  }
+
+  if (existing.is_default) {
+    return NextResponse.json({ error: 'Cannot edit a default persona' }, { status: 403 });
+  }
+
   const body = await req.json();
   const { name, emoji, accent_color, tagline, personality } = body;
 
@@ -27,6 +43,7 @@ export async function PATCH(
     .from('personas')
     .update(updateData)
     .eq('id', id)
+    .eq('user_id', user.id)
     .select()
     .single();
 
@@ -48,10 +65,27 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Block deletion of default personas
+  const { data: existing } = await supabase
+    .from('personas')
+    .select('is_default')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single();
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Persona not found' }, { status: 404 });
+  }
+
+  if (existing.is_default) {
+    return NextResponse.json({ error: 'Cannot delete a default persona' }, { status: 403 });
+  }
+
   const { error } = await supabase
     .from('personas')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

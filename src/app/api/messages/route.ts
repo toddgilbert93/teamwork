@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     .from('messages')
     .select('*')
     .eq('persona_id', personaId)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -46,7 +47,8 @@ export async function DELETE(req: Request) {
   const { error } = await supabase
     .from('messages')
     .delete()
-    .eq('persona_id', personaId);
+    .eq('persona_id', personaId)
+    .eq('user_id', user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

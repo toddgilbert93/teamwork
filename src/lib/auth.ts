@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000000';
+const DEV_USER_ID = '84549948-8e00-4d92-abbd-c664fe4e14b0';
 export const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
 
 /**
@@ -19,10 +19,9 @@ export async function getAuthUser(supabase: SupabaseClient) {
 }
 
 /**
- * Returns `{ user_id: user.id }` when auth is active, or `{}` when skipped.
- * Spread into insert objects: `.insert({ ...data, ...userIdField(user) })`
+ * Returns `{ user_id: user.id }` for spreading into insert objects.
+ * Always sets user_id — even in skip-auth mode (uses DEV_USER_ID).
  */
 export function userIdField(user: { id: string }) {
-  if (SKIP_AUTH) return {};
   return { user_id: user.id };
 }
