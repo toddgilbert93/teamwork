@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
-import { getAuthUser } from '@/lib/auth';
+import { getAuthUser, userIdField } from '@/lib/auth';
 import { getAnthropicClient } from '@/lib/anthropic';
 import { MODEL_NAME } from '@/lib/constants';
 import { estimateTokens } from '@/lib/tokens';
@@ -263,7 +263,7 @@ export async function POST(req: Request) {
     // 1. Save user message
     await supabase
       .from('room_messages')
-      .insert({ persona_id: null, role: 'user', content: message, user_id: user.id });
+      .insert({ persona_id: null, role: 'user', content: message, ...userIdField(user) });
 
     // 2. Fetch all personas
     const { data: personas, error: personasError } = await supabase
@@ -414,7 +414,7 @@ export async function POST(req: Request) {
                   persona_id: persona.id,
                   role: 'assistant',
                   content: forcedResponse,
-                  user_id: user.id,
+                  ...userIdField(user),
                 })
                 .select('id')
                 .single();
@@ -533,7 +533,7 @@ export async function POST(req: Request) {
                   persona_id: persona.id,
                   role: 'assistant',
                   content: response,
-                  user_id: user.id,
+                  ...userIdField(user),
                 })
                 .select('id')
                 .single();

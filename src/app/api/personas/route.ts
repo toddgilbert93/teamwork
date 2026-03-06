@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       system_prompt,
       tagline: tagline || null,
       sort_order,
-      user_id: user.id,
+      ...userIdField(user),
     })
     .select()
     .single();
