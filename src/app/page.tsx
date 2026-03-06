@@ -123,20 +123,23 @@ export default function Home() {
   };
 
   return (
-    <div
-      className="h-screen w-screen flex items-center justify-center p-4 sm:p-6 md:p-10"
-      style={{
-        backgroundImage: 'url(/b3.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
-      }}
-    >
+    <div className="h-screen w-screen flex items-center justify-center p-0 sm:p-6 md:p-10 relative">
+      {/* Background image — hidden on mobile */}
+      <div
+        className="hidden sm:block absolute inset-0"
+        style={{
+          backgroundImage: 'url(/b3.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      />
       {/* App card */}
-      <div className="relative w-full h-full max-w-6xl max-h-[900px] flex flex-col rounded-2xl overflow-hidden
-                      bg-[#faf9f6]/90 backdrop-blur-xl shadow-2xl shadow-black/20
-                      ring-1 ring-black/10">
+      <div className="relative w-full h-full max-w-6xl sm:max-h-[900px] flex flex-col
+                      rounded-none sm:rounded-2xl overflow-hidden
+                      bg-[#faf9f6] sm:bg-[#faf9f6]/90 sm:backdrop-blur-xl
+                      shadow-none sm:shadow-2xl sm:shadow-black/20
+                      ring-0 sm:ring-1 sm:ring-black/10">
         <TopBar />
 
         <div className="flex-1 flex overflow-hidden">

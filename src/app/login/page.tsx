@@ -49,8 +49,10 @@ function LoginContent() {
 
   return (
     <div className="w-full max-w-sm flex flex-col items-center gap-8
-                    bg-[#faf9f6]/90 backdrop-blur-xl rounded-2xl p-10
-                    shadow-2xl shadow-black/20 ring-1 ring-black/10">
+                    bg-[#faf9f6] sm:bg-[#faf9f6]/90 sm:backdrop-blur-xl
+                    rounded-2xl p-10
+                    shadow-none sm:shadow-2xl sm:shadow-black/20
+                    ring-0 sm:ring-1 sm:ring-black/10">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
           Polyphony
@@ -91,18 +93,22 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <div
-      className="h-screen w-screen flex items-center justify-center p-4"
-      style={{
-        backgroundImage: 'url(/b3.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
-      }}
-    >
+    <div className="h-screen w-screen flex items-center justify-center p-0 sm:p-4
+                    bg-[#faf9f6] sm:bg-transparent relative">
+      {/* Background image — hidden on mobile */}
+      <div
+        className="hidden sm:block absolute inset-0"
+        style={{
+          backgroundImage: 'url(/b3.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      />
       <Suspense>
-        <LoginContent />
+        <div className="relative z-10">
+          <LoginContent />
+        </div>
       </Suspense>
     </div>
   );
