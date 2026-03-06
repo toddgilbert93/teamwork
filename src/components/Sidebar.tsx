@@ -23,14 +23,26 @@ export function Sidebar({ personas, loading }: SidebarProps) {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
+  const isDemo = typeof document !== 'undefined' && document.cookie.includes('polyphony_demo=true');
+
   useEffect(() => {
+    if (isDemo) {
+      setUserEmail('demo@polyphony.local');
+      return;
+    }
     const supabase = createBrowserClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserEmail(user?.email ?? null);
     });
-  }, []);
+  }, [isDemo]);
 
   const handleSignOut = async () => {
+    if (isDemo) {
+      await fetch('/api/auth/demo', { method: 'DELETE' });
+      document.cookie = 'polyphony_demo=; path=/; max-age=0';
+      router.push('/login');
+      return;
+    }
     const supabase = createBrowserClient();
     await supabase.auth.signOut();
     router.push('/login');

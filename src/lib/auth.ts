@@ -1,14 +1,28 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 
-const DEV_USER_ID = '84549948-8e00-4d92-abbd-c664fe4e14b0';
-export const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
+const DEMO_USER_ID = '99e9e458-1ef5-415b-b57f-b3e0503b2560';
+const DEMO_COOKIE = 'polyphony_demo';
 
 /**
- * Returns the authenticated user, or a mock dev user when NEXT_PUBLIC_SKIP_AUTH=true.
+ * Check if the current request is in demo mode (cookie-based).
+ */
+export async function isDemoMode(): Promise<boolean> {
+  try {
+    const cookieStore = await cookies();
+    return cookieStore.get(DEMO_COOKIE)?.value === 'true';
+  } catch {
+    // cookies() may throw in some contexts (e.g. during build)
+    return false;
+  }
+}
+
+/**
+ * Returns the authenticated user, or the demo user when demo cookie is set.
  */
 export async function getAuthUser(supabase: SupabaseClient) {
-  if (SKIP_AUTH) {
-    return { id: DEV_USER_ID, email: 'dev@localhost' };
+  if (await isDemoMode()) {
+    return { id: DEMO_USER_ID, email: 'demo@polyphony.local' };
   }
 
   const {
@@ -20,7 +34,6 @@ export async function getAuthUser(supabase: SupabaseClient) {
 
 /**
  * Returns `{ user_id: user.id }` for spreading into insert objects.
- * Always sets user_id — even in skip-auth mode (uses DEV_USER_ID).
  */
 export function userIdField(user: { id: string }) {
   return { user_id: user.id };
