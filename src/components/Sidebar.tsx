@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -21,6 +21,14 @@ export function Sidebar({ personas, loading }: SidebarProps) {
     setShowNewPersonaForm,
   } = useAppStore();
   const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null);
+    });
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createBrowserClient();
@@ -101,6 +109,11 @@ export function Sidebar({ personas, loading }: SidebarProps) {
             <LogOut className="w-4 h-4" />
             Sign out
           </button>
+          {userEmail && (
+            <p className="text-[11px] text-gray-400 px-3 truncate">
+              Signed in as: {userEmail}
+            </p>
+          )}
         </div>
       </div>
     </aside>

@@ -13,6 +13,7 @@ const PERSONA_TEMPERATURES: Record<string, number> = {
   'Rex': 0.5,
   'Mira': 0.7,
   'Mean guy': 0.9,
+  'Atlas': 0.8,
 };
 
 function delay(ms: number): Promise<void> {
@@ -440,7 +441,7 @@ export async function POST(req: Request) {
                 persona_id: persona.id,
                 role: 'assistant',
                 content: response,
-                user_id: user.id,
+                ...userIdField(user),
               })
               .select('id')
               .single();

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -14,6 +15,14 @@ interface ParticipantListProps {
 export function ParticipantList({ personas, loading }: ParticipantListProps) {
   const { sidebarOpen, mutedPersonaIds, toggleMutedPersona } = useAppStore();
   const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null);
+    });
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createBrowserClient();
@@ -95,6 +104,11 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
             <LogOut className="w-4 h-4" />
             Sign out
           </button>
+          {userEmail && (
+            <p className="text-[11px] text-gray-400 px-3 truncate">
+              Signed in as: {userEmail}
+            </p>
+          )}
         </div>
       </div>
     </aside>

@@ -11,6 +11,7 @@ const PERSONA_TEMPERATURES: Record<string, number> = {
   'Rex': 0.5,
   'Mira': 0.7,
   'Mean guy': 0.9,
+  'Atlas': 0.8,
 };
 
 export async function POST(req: Request) {
