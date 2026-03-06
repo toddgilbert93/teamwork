@@ -1,0 +1,3 @@
+-- The database trigger approach doesn't work reliably on hosted Supabase.
+-- Default personas are now seeded by the application layer (GET /api/personas).
+-- This migration is intentionally empty.

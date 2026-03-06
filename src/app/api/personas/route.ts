@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getAuthUser, userIdField } from '@/lib/auth';
+import { DEFAULT_PERSONAS } from '@/lib/default-personas';
 
 export async function GET() {
   const supabase = await createServerClient();
@@ -10,7 +11,7 @@ export async function GET() {
   }
 
   // Fetch personas for this user
-  const { data: personas, error } = await supabase
+  let { data: personas, error } = await supabase
     .from('personas')
     .select('*')
     .eq('user_id', user.id)
@@ -18,6 +19,19 @@ export async function GET() {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Seed defaults for new users who have no personas yet
+  if (!personas || personas.length === 0) {
+    const rows = DEFAULT_PERSONAS.map((p) => ({ ...p, user_id: user.id }));
+    const { data: seeded, error: seedErr } = await supabase
+      .from('personas')
+      .insert(rows)
+      .select();
+    if (seedErr) {
+      return NextResponse.json({ error: seedErr.message }, { status: 500 });
+    }
+    personas = seeded;
   }
 
   // Fetch last message for each persona
