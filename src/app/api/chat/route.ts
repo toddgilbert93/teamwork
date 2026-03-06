@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       .from('personas')
       .select('*')
       .eq('id', persona_id)
+      .eq('user_id', user.id)
       .single();
 
     if (personaError || !persona) {
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
       .from('messages')
       .select('*')
       .eq('persona_id', persona_id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
     if (messagesError) {
@@ -80,7 +82,8 @@ export async function POST(req: Request) {
           await supabase
             .from('personas')
             .update({ memory_summary: summary })
-            .eq('id', persona_id);
+            .eq('id', persona_id)
+            .eq('user_id', user.id);
         })
         .catch(console.error);
     }

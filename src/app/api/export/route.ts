@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     .from('personas')
     .select('name, emoji')
     .eq('id', personaId)
+    .eq('user_id', user.id)
     .single();
 
   if (personaError || !persona) {
@@ -32,6 +33,7 @@ export async function GET(req: Request) {
     .from('messages')
     .select('role, content, created_at')
     .eq('persona_id', personaId)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 
   if (messagesError) {

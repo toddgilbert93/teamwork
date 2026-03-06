@@ -43,6 +43,7 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   const isEditing = !!persona;
+  const isViewOnly = !!persona?.is_default;
 
   useEffect(() => {
     if (persona) {
@@ -120,9 +121,52 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 overflow-y-auto flex-1" style={{ overflow: showEmojiPicker ? 'visible' : undefined }}>
         <h3 className="font-semibold text-gray-900 mb-5">
-          {isEditing ? 'Edit Persona' : 'New Companion'}
+          {isViewOnly ? 'View Companion' : isEditing ? 'Edit Persona' : 'New Companion'}
         </h3>
 
+        {isViewOnly ? (
+          /* View-only layout for default personas */
+          <div className="space-y-5">
+            {/* Emoji + Name */}
+            <div className="flex items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                style={{ backgroundColor: accentColor + '15' }}
+              >
+                {emoji}
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{name}</p>
+                {tagline && <p className="text-sm text-gray-500">{tagline}</p>}
+              </div>
+              <div
+                className="ml-auto w-6 h-6 rounded-full border border-gray-200"
+                style={{ backgroundColor: accentColor }}
+                title={accentColor}
+              />
+            </div>
+
+            {/* System Prompt */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">System Prompt</label>
+              <div className="w-full max-h-64 overflow-y-auto rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {personality}
+              </div>
+            </div>
+
+            {/* Close button */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium
+                         text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Emoji + Name row */}
           <div className="flex gap-3 items-start">
@@ -321,6 +365,7 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
             </div>
           </div>
         </form>
+        )}
         </div>
       </div>
     </div>

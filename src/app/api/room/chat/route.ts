@@ -270,6 +270,7 @@ export async function POST(req: Request) {
     const { data: personas, error: personasError } = await supabase
       .from('personas')
       .select('*')
+      .eq('user_id', user.id)
       .order('sort_order', { ascending: true });
 
     if (personasError || !personas || personas.length === 0) {
@@ -280,6 +281,7 @@ export async function POST(req: Request) {
     const { data: historyRows } = await supabase
       .from('room_messages')
       .select('*, personas(name, emoji, accent_color)')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
     const history: RoomHistoryMsg[] = (historyRows || []).slice(0, -1).map((row: Record<string, unknown>) => {
