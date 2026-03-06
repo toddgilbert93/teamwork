@@ -1,65 +1,182 @@
-import Image from "next/image";
+'use client';
+
+import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useAppStore } from '@/stores/app-store';
+import { usePersonas } from '@/hooks/usePersonas';
+import { useMessages } from '@/hooks/useMessages';
+import { useChat } from '@/hooks/useChat';
+import { TopBar } from '@/components/TopBar';
+import { Sidebar } from '@/components/Sidebar';
+import { ChatArea } from '@/components/ChatArea';
+import { PersonaForm } from '@/components/PersonaForm';
+import { MemoryModal } from '@/components/MemoryModal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 export default function Home() {
+  const {
+    activePersonaId,
+    setActivePersonaId,
+    showNewPersonaForm,
+    setShowNewPersonaForm,
+    editingPersona,
+    setEditingPersona,
+    showMemoryModal,
+    setShowMemoryModal,
+    showConfirmClear,
+    setShowConfirmClear,
+    activeTab,
+  } = useAppStore();
+
+  const { personas, loading: personasLoading, refetch: refetchPersonas, createPersona, updatePersona, deletePersona } = usePersonas();
+  const { messages, loading: messagesLoading, addMessage, clearMessages } = useMessages(activePersonaId);
+
+  // Auto-select the most recently interacted persona on initial load
+  const hasAutoSelected = useRef(false);
+  useEffect(() => {
+    if (hasAutoSelected.current || personasLoading || personas.length === 0 || activePersonaId) return;
+    hasAutoSelected.current = true;
+
+    const sorted = [...personas].sort((a, b) => {
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime;
+    });
+    setActivePersonaId(sorted[0].id);
+  }, [personas, personasLoading, activePersonaId, setActivePersonaId]);
+
+  const activePersona = useMemo(
+    () => personas.find((p) => p.id === activePersonaId) ?? null,
+    [personas, activePersonaId]
+  );
+
+  const handleRefreshPersonas = useCallback(() => {
+    refetchPersonas();
+  }, [refetchPersonas]);
+
+  const { sendMessage, abort } = useChat({
+    personaId: activePersonaId,
+    onMessageAdded: addMessage,
+    onRefreshPersonas: handleRefreshPersonas,
+  });
+
+  const handleCreatePersona = async (data: {
+    name: string;
+    emoji: string;
+    accent_color: string;
+    tagline: string;
+    personality: string;
+  }) => {
+    const created = await createPersona(data);
+    if (created) {
+      setActivePersonaId(created.id);
+    }
+  };
+
+  const handleUpdatePersona = async (data: {
+    name: string;
+    emoji: string;
+    accent_color: string;
+    tagline: string;
+    personality: string;
+  }) => {
+    if (!editingPersona) return;
+    await updatePersona(editingPersona.id, data);
+  };
+
+  const handleDeletePersona = async () => {
+    if (!editingPersona) return;
+    await deletePersona(editingPersona.id);
+    if (activePersonaId === editingPersona.id) {
+      setActivePersonaId(null);
+    }
+    setEditingPersona(null);
+  };
+
+  const handleClearHistory = async (saveMemory: boolean) => {
+    await clearMessages(saveMemory);
+    setShowConfirmClear(false);
+    refetchPersonas();
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div
+      className="h-screen w-screen flex items-center justify-center p-4 sm:p-6 md:p-10"
+      style={{
+        backgroundImage: 'url(/b3.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+      }}
+    >
+      {/* App card */}
+      <div className="relative w-full h-full max-w-6xl max-h-[900px] flex flex-col rounded-2xl overflow-hidden
+                      bg-[#faf9f6]/90 backdrop-blur-xl shadow-2xl shadow-black/20
+                      ring-1 ring-black/10">
+        <TopBar />
+
+        <div className="flex-1 flex overflow-hidden">
+          {activeTab === 'chat' && (
+            <Sidebar personas={personas} loading={personasLoading} />
+          )}
+
+          {activeTab === 'chat' ? (
+            <ChatArea
+              persona={activePersona}
+              messages={messages}
+              messagesLoading={messagesLoading}
+              onSendMessage={sendMessage}
+              onAbort={abort}
+              onRefreshPersonas={handleRefreshPersonas}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <div className="text-5xl mb-4 opacity-80">🏠</div>
+              <h2 className="text-lg font-semibold text-gray-800 mb-1">Room</h2>
+              <p className="text-sm text-gray-500 max-w-xs">
+                Coming soon. This is where shared spaces will live.
+              </p>
+            </div>
+          )}
         </div>
-      </main>
+      </div>
+
+      {/* Modals */}
+      <PersonaForm
+        open={showNewPersonaForm}
+        onSave={handleCreatePersona}
+        onClose={() => setShowNewPersonaForm(false)}
+      />
+
+      <PersonaForm
+        open={!!editingPersona}
+        persona={editingPersona}
+        onSave={handleUpdatePersona}
+        onDelete={handleDeletePersona}
+        onClose={() => setEditingPersona(null)}
+      />
+
+      {activePersona && (
+        <MemoryModal
+          open={showMemoryModal}
+          persona={activePersona}
+          onClose={() => setShowMemoryModal(false)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={showConfirmClear}
+        title="Clear conversation?"
+        message={`This will delete all messages with ${activePersona?.name || 'this persona'}. This cannot be undone.`}
+        confirmLabel="Clear without saving"
+        variant="danger"
+        extraAction={{
+          label: 'Save memory, then clear',
+          onClick: () => handleClearHistory(true),
+        }}
+        onConfirm={() => handleClearHistory(false)}
+        onCancel={() => setShowConfirmClear(false)}
+      />
     </div>
   );
 }
