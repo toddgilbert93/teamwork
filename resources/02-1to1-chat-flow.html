@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1:1 Chat — Prompt Construction Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 40px; }
+  h1 { text-align: center; font-size: 26px; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 40px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  /* Sequence diagram */
+  .seq { position: relative; }
+  .lane { display: flex; align-items: flex-start; gap: 0; margin-bottom: 0; }
+  .lane-label { width: 140px; flex-shrink: 0; text-align: right; padding-right: 20px; padding-top: 12px; font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .lane-content { flex: 1; }
+
+  .step { display: flex; align-items: stretch; margin-bottom: 2px; }
+  .step-num { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; margin-right: 16px; margin-top: 10px; }
+  .step-body { flex: 1; border-radius: 10px; padding: 14px 18px; position: relative; }
+  .step-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .step-detail { font-size: 12px; line-height: 1.6; color: #94a3b8; }
+  .step-detail code { background: #1e293b; padding: 1px 5px; border-radius: 3px; font-family: 'SF Mono', monospace; font-size: 11px; color: #60a5fa; }
+
+  .connector { width: 2px; height: 20px; margin-left: 17px; margin-bottom: 2px; }
+
+  /* Color themes */
+  .t-blue .step-num { background: #1e3a5f; color: #60a5fa; }
+  .t-blue .step-body { background: #172554; border: 1px solid #1e3a5f; }
+  .t-blue .connector { background: #1e3a5f; }
+
+  .t-green .step-num { background: #14532d; color: #4ade80; }
+  .t-green .step-body { background: #052e16; border: 1px solid #14532d; }
+  .t-green .connector { background: #14532d; }
+
+  .t-purple .step-num { background: #3b1f5e; color: #a78bfa; }
+  .t-purple .step-body { background: #2e1065; border: 1px solid #3b1f5e; }
+  .t-purple .connector { background: #3b1f5e; }
+
+  .t-amber .step-num { background: #422006; color: #fbbf24; }
+  .t-amber .step-body { background: #351c05; border: 1px solid #422006; }
+  .t-amber .connector { background: #422006; }
+
+  .t-red .step-num { background: #450a0a; color: #f87171; }
+  .t-red .step-body { background: #3b0808; border: 1px solid #450a0a; }
+  .t-red .connector { background: #450a0a; }
+
+  /* API payload box */
+  .payload { background: #0f172a; border: 2px solid #7c3aed; border-radius: 12px; padding: 20px; margin: 24px 0; }
+  .payload-title { font-size: 16px; font-weight: 700; color: #a78bfa; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .payload-title::before { content: '⬡'; font-size: 18px; }
+  .payload-section { margin-bottom: 14px; }
+  .payload-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #7c3aed; margin-bottom: 6px; }
+  .payload-content { background: #1e293b; border-radius: 8px; padding: 12px 14px; font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.7; color: #cbd5e1; white-space: pre-wrap; }
+  .payload-content .key { color: #a78bfa; }
+  .payload-content .val { color: #4ade80; }
+  .payload-content .comment { color: #475569; }
+  .payload-content .highlight { background: #422006; padding: 2px 4px; border-radius: 3px; color: #fbbf24; }
+
+  .divider { border: none; border-top: 1px dashed #334155; margin: 28px 0; }
+
+  .note { background: #1e293b; border-left: 3px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 16px 0; font-size: 12px; color: #94a3b8; }
+  .note strong { color: #fbbf24; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>1:1 Persona Chat — Full Prompt Flow</h1>
+  <p class="subtitle">POST /api/chat → anthropic.messages.stream() — Exactly what gets sent to Anthropic and how it's constructed</p>
+
+  <!-- Step 1 -->
+  <div class="t-blue">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Browser sends message</div>
+        <div class="step-detail">
+          <code>useChat</code> hook calls <code>POST /api/chat</code> with:<br>
+          <code>{ persona_id: "uuid", message: "user's text" }</code>
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="t-green">
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Fetch persona from Supabase</div>
+        <div class="step-detail">
+          Retrieves: <code>system_prompt</code>, <code>memory_summary</code>, <code>name</code><br>
+          The persona's <code>name</code> determines its temperature setting.
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="t-green">
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Fetch full message history from Supabase</div>
+        <div class="step-detail">
+          All messages for this persona, ordered by <code>created_at ASC</code>.<br>
+          New user message is appended to this array in memory.
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="t-amber">
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Apply sliding window</div>
+        <div class="step-detail">
+          <code>applyWindowToMessages()</code> keeps only recent messages that fit within <strong>~71,904 tokens</strong>.<br>
+          Budget = <code>80,000</code> (target) − <code>4,000</code> (system buffer) − <code>4,096</code> (max response)<br>
+          Token estimation: <code>Math.ceil(text.length / 3.5) + 4</code> per message<br><br>
+          Returns: <code>{ windowed: Message[], trimmed: Message[] }</code>
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="t-amber">
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Build system prompt</div>
+        <div class="step-detail">
+          If persona has a <code>memory_summary</code>, it's prepended to the system prompt:<br><br>
+          <code>## Conversation Memory</code><br>
+          <code>The following is a summary of earlier conversations...</code><br>
+          <code>{memory_summary}</code><br>
+          <code>---</code><br>
+          <code>## Your Identity</code><br>
+          <code>{persona.system_prompt}</code><br><br>
+          If no memory exists, just <code>persona.system_prompt</code> alone.
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 6 -->
+  <div class="t-amber">
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Format messages for API</div>
+        <div class="step-detail">
+          Each windowed message is mapped to: <code>{ role: "user"|"assistant", content: string }</code><br>
+          No additional formatting — raw message content is passed through.
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- THE API CALL -->
+  <div class="payload">
+    <div class="payload-title">Anthropic API Call — anthropic.messages.stream()</div>
+
+    <div class="payload-section">
+      <div class="payload-label">Request Parameters</div>
+      <div class="payload-content"><span class="key">model:</span>      <span class="val">"claude-sonnet-4-20250514"</span>
+<span class="key">max_tokens:</span> <span class="val">4096</span>
+<span class="key">temperature:</span> <span class="val">0.3</span> <span class="comment">// Sol=0.3, Rex=0.5, Mira=0.7, Mean guy=0.9</span>
+<span class="key">system:</span>      <span class="highlight">⬇ see below</span>
+<span class="key">messages:</span>    <span class="highlight">⬇ see below</span></div>
+    </div>
+
+    <div class="payload-section">
+      <div class="payload-label">system (string)</div>
+      <div class="payload-content"><span class="comment">// WITH memory:</span>
+<span class="val">## Conversation Memory
+The following is a summary of earlier conversations with this user:
+
+{persona.memory_summary}
+
+---
+
+## Your Identity
+{persona.system_prompt}</span>
+
+<span class="comment">// WITHOUT memory:</span>
+<span class="val">{persona.system_prompt}</span></div>
+    </div>
+
+    <div class="payload-section">
+      <div class="payload-label">messages (array) — sliding window, most recent that fit in ~71,904 tokens</div>
+      <div class="payload-content"><span class="val">[
+  { role: "user",      content: "oldest retained message..." },
+  { role: "assistant", content: "persona response..." },
+  { role: "user",      content: "..." },
+  { role: "assistant", content: "..." },
+  ...
+  { role: "user",      content: "the new user message" }  <span class="comment">// always last</span>
+]</span></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Step 7 -->
+  <div class="t-purple">
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <div class="step-title">Stream response back via SSE</div>
+        <div class="step-detail">
+          Response tokens are streamed as <code>data: {"type":"text_delta","text":"..."}</code><br>
+          On completion: <code>data: {"type":"message_complete","message_id":"..."}</code><br>
+          Full response is saved to Supabase <code>messages</code> table.
+        </div>
+      </div>
+    </div>
+    <div class="connector"></div>
+  </div>
+
+  <!-- Step 8 -->
+  <div class="t-red">
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <div class="step-title">Background memory summarization (conditional)</div>
+        <div class="step-detail">
+          <strong>Only if</strong> <code>trimmed.length > 20</code> — fires a background (non-blocking) call to<br>
+          <code>generateMemorySummary(trimmed, persona.memory_summary)</code><br>
+          This makes a <strong>separate synchronous API call</strong> — see Memory Summarization diagram.<br>
+          Result is saved to <code>personas.memory_summary</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Key insight:</strong> A single user message in 1:1 chat produces 1 streaming API call (always), plus potentially 1 additional synchronous API call for memory summarization (only when >20 messages are trimmed from the context window). So 1–2 API calls total per user message.
+  </div>
+</div>
+</body>
+</html>

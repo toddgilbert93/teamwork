@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Interaction Overview — All Anthropic API Calls</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 40px; min-height: 100vh; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #f8fafc; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 14px; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; max-width: 1400px; margin: 0 auto; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 28px; position: relative; }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 16px 16px 0 0; }
+  .card:nth-child(1)::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+  .card:nth-child(2)::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+  .card:nth-child(3)::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .card-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .card-route { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #64748b; margin-bottom: 16px; background: #0f172a; padding: 4px 10px; border-radius: 6px; display: inline-block; }
+  .card-desc { color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+  .api-box { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .api-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
+  .api-detail { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+  .api-detail code { background: #1e293b; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; color: #60a5fa; }
+  .tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 4px; margin-right: 4px; margin-bottom: 4px; }
+  .tag-stream { background: #1e3a5f; color: #60a5fa; }
+  .tag-sync { background: #3b1f5e; color: #a78bfa; }
+  .tag-bg { background: #422006; color: #fbbf24; }
+  .summary { max-width: 1400px; margin: 40px auto 0; background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 28px; }
+  .summary h2 { font-size: 18px; margin-bottom: 16px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat { text-align: center; }
+  .stat-val { font-size: 28px; font-weight: 800; color: #f8fafc; }
+  .stat-label { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .arrow-section { max-width: 1400px; margin: 40px auto; }
+  .flow-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .flow-box { padding: 10px 16px; border-radius: 8px; font-size: 13px; white-space: nowrap; }
+  .flow-user { background: #1e3a5f; color: #93c5fd; border: 1px solid #3b82f6; }
+  .flow-server { background: #1e293b; color: #cbd5e1; border: 1px solid #475569; }
+  .flow-api { background: #3b1f5e; color: #c4b5fd; border: 1px solid #7c3aed; }
+  .flow-db { background: #14532d; color: #86efac; border: 1px solid #22c55e; }
+  .flow-arrow { color: #475569; font-size: 20px; }
+</style>
+</head>
+<body>
+  <h1>Anthropic API Call Map</h1>
+  <p class="subtitle">Every LLM interaction in the codebase — 3 distinct API call patterns across 2 chat modes + memory system</p>
+
+  <div class="grid">
+    <!-- Card 1: 1:1 Chat -->
+    <div class="card">
+      <div class="card-title">1:1 Persona Chat</div>
+      <div class="card-route">POST /api/chat</div>
+      <div class="card-desc">Single persona conversation with sliding-window context and per-persona temperature. Streams response tokens back to the browser via SSE.</div>
+      <div class="api-box">
+        <div class="api-label">Anthropic API Call</div>
+        <div class="api-detail">
+          <code>anthropic.messages.stream()</code><br><br>
+          Model: <code>claude-sonnet-4-20250514</code><br>
+          Max tokens: <code>4096</code><br>
+          System: persona prompt + memory summary<br>
+          Messages: sliding window (~71,904 tokens)<br>
+          Temperature: <code>0.3–0.9</code> per persona
+        </div>
+      </div>
+      <span class="tag tag-stream">Streaming</span>
+      <span class="tag tag-bg">May trigger memory</span>
+    </div>
+
+    <!-- Card 2: Room Chat -->
+    <div class="card">
+      <div class="card-title">Room Group Chat</div>
+      <div class="card-route">POST /api/room/chat</div>
+      <div class="card-desc">Multi-persona group discussion. Up to 3 personas respond sequentially, each seeing prior responses. Optional follow-up round (50% chance).</div>
+      <div class="api-box">
+        <div class="api-label">Anthropic API Calls (per turn)</div>
+        <div class="api-detail">
+          <code>anthropic.messages.stream()</code> × 1–4+ calls<br><br>
+          Model: <code>claude-sonnet-4-20250514</code><br>
+          Max tokens: <code>300</code><br>
+          System: room-specific prompt with rules<br>
+          Messages: room history (~60K tokens)<br>
+          Temperature: <code>0.3–0.9</code> per persona<br><br>
+          <em>Each persona is a separate API call. Forced retry if all pass.</em>
+        </div>
+      </div>
+      <span class="tag tag-stream">Streaming × N</span>
+    </div>
+
+    <!-- Card 3: Memory -->
+    <div class="card">
+      <div class="card-title">Memory Summarization</div>
+      <div class="card-route">Background / POST /api/memory</div>
+      <div class="card-desc">Summarizes trimmed conversation history into a persistent memory. Triggered automatically when >20 messages are trimmed, or manually via API.</div>
+      <div class="api-box">
+        <div class="api-label">Anthropic API Call</div>
+        <div class="api-detail">
+          <code>client.messages.create()</code><br><br>
+          Model: <code>claude-sonnet-4-20250514</code><br>
+          Max tokens: <code>1024</code><br>
+          System: <em>none</em><br>
+          Messages: single user message with<br>
+          &nbsp;&nbsp;→ summarization prompt template<br>
+          &nbsp;&nbsp;→ existing memory (if any)<br>
+          &nbsp;&nbsp;→ trimmed messages text
+        </div>
+      </div>
+      <span class="tag tag-sync">Synchronous</span>
+      <span class="tag tag-bg">Background (fire-and-forget)</span>
+    </div>
+  </div>
+
+  <div class="summary">
+    <h2>At a Glance</h2>
+    <div class="summary-grid">
+      <div class="stat">
+        <div class="stat-val">3</div>
+        <div class="stat-label">Distinct API Call Patterns</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">1–6</div>
+        <div class="stat-label">API Calls per User Message</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">1</div>
+        <div class="stat-label">Model Used (Sonnet 4)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">4</div>
+        <div class="stat-label">Temperature Presets</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-section">
+    <h2 style="font-size:18px; margin-bottom:20px;">High-Level Data Flow</h2>
+    <div class="flow-row">
+      <div class="flow-box flow-user">Browser (React)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-server">Next.js API Route</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-db">Supabase (fetch history)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-server">Build system prompt + window messages</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-api">Anthropic API</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-server">SSE Stream</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-user">Browser</div>
+    </div>
+    <div class="flow-row" style="margin-left: 60px;">
+      <div class="flow-arrow" style="transform: rotate(90deg); margin-left:200px;">↓</div>
+    </div>
+    <div class="flow-row" style="margin-left: 60px;">
+      <div style="width:200px;"></div>
+      <div class="flow-box flow-db">Supabase (save response)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:#422006; color:#fbbf24; border:1px solid #f59e0b;">Memory summarization (if trimmed > 20)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-api">Anthropic API</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box flow-db">Supabase (save summary)</div>
+    </div>
+  </div>
+</body>
+</html>

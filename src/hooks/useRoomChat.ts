@@ -42,10 +42,11 @@ export function useRoomChat({ personas, onMessageAdded }: UseRoomChatOptions) {
       let currentPersonaAccumulator = '';
 
       try {
+        const mutedIds = Array.from(useAppStore.getState().mutedPersonaIds);
         const res = await fetch('/api/room/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: text, mutedPersonaIds: mutedIds }),
           signal: controller.signal,
         });
 

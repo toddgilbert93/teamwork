@@ -4,8 +4,19 @@ import { MODEL_NAME } from '@/lib/constants';
 import { estimateTokens } from '@/lib/tokens';
 import type { Persona, RoomStreamEvent } from '@/lib/types';
 
-const ROOM_MAX_RESPONSE_TOKENS = 1024;
+const ROOM_MAX_RESPONSE_TOKENS = 300;
 const ROOM_AVAILABLE_TOKENS = 60000;
+
+const PERSONA_TEMPERATURES: Record<string, number> = {
+  'Sol': 0.3,
+  'Rex': 0.5,
+  'Mira': 0.7,
+  'Mean guy': 0.9,
+};
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface TurnResponse {
   persona_id: string;
@@ -39,6 +50,42 @@ function isPass(response: string): boolean {
   return response.trim().toLowerCase().replace(/[.,!?]$/, '') === 'pass';
 }
 
+function cleanPersonaResponse(
+  response: string,
+  currentPersona: Persona,
+  allPersonas: Persona[]
+): string {
+  let cleaned = response;
+
+  // Strip own [Name]: prefix at the start
+  const ownPrefixRe = new RegExp(`^\\[${currentPersona.name}\\]:\\s*`, 'i');
+  cleaned = cleaned.replace(ownPrefixRe, '');
+
+  // Strip XML-style tags
+  cleaned = cleaned.replace(/<message from="[^"]*">\n?/g, '');
+  cleaned = cleaned.replace(/\n?<\/message>/g, '');
+
+  // Truncate at the first occurrence of another persona's name being "spoken as"
+  // This catches patterns like: "Rex:", "[Rex]:", "🔮Mira", "⚡Dash", etc.
+  const otherPersonas = allPersonas.filter((p) => p.id !== currentPersona.id);
+  for (const p of otherPersonas) {
+    // Match Name: at start of a line, or [Name]:, or emoji+Name patterns
+    const patterns = [
+      new RegExp(`\\n${p.emoji}\\s*${p.name}`, 'i'),
+      new RegExp(`\\n\\[${p.name}\\]:`, 'i'),
+      new RegExp(`\\n${p.name}:\\s`, 'i'),
+    ];
+    for (const pat of patterns) {
+      const match = cleaned.search(pat);
+      if (match !== -1) {
+        cleaned = cleaned.substring(0, match);
+      }
+    }
+  }
+
+  return cleaned.trim();
+}
+
 function buildRoomSystemPrompt(
   persona: Persona,
   allPersonas: Persona[],
@@ -58,7 +105,9 @@ function buildRoomSystemPrompt(
 
   prompt += `## Group Discussion Context\n`;
   prompt += `You are in a group discussion with the user and these other companions: ${otherNames}.\n`;
-  prompt += `Keep your response concise — 2 to 4 sentences. This is a group chat, not a monologue.\n`;
+  prompt += `IMPORTANT: You are ONLY ${persona.name}. Respond ONLY as yourself. NEVER generate text on behalf of other personas. Do NOT prefix your response with your name or anyone else's name (e.g. no "[${persona.name}]:" or "[OtherName]:"). Just write your response directly — attribution is handled by the system.\n`;
+  prompt += `Keep your response very short — 1 to 2 sentences max. This is a quick group chat, not a monologue.\n`;
+  prompt += `Do NOT agree with or rephrase what another persona just said. If you agree, pass. Only respond if you have a genuinely different angle.\n`;
   prompt += `You can reference other personas by name when responding to their points.\n`;
 
   if (!forceRespond) {
@@ -68,7 +117,7 @@ function buildRoomSystemPrompt(
   }
 
   if (isFollowUp) {
-    prompt += `\n## Follow-Up Instructions\nRespond to or build on something one of the other personas just said. Do not repeat your earlier point. Keep it to 1-2 sentences.\n`;
+    prompt += `\n## Follow-Up Instructions\nRespond to or build on something one of the other personas just said. Do not repeat your earlier point. One sentence only.\n`;
   }
 
   return prompt;
@@ -87,36 +136,31 @@ function buildAnthropicMessages(
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
-  // Convert room history to alternating messages with persona prefixes
+  // Convert room history — keep each assistant message as a separate exchange
+  // Persona attribution is only in the system prompt context, not in the content
   for (const msg of history) {
-    const prefix =
-      msg.role === 'assistant' && msg.persona_name ? `[${msg.persona_name}]: ` : '';
-    const content = prefix + msg.content;
-
     if (messages.length > 0 && messages[messages.length - 1].role === msg.role) {
-      messages[messages.length - 1].content += '\n\n' + content;
+      messages[messages.length - 1].content += '\n\n' + msg.content;
     } else {
-      messages.push({ role: msg.role, content });
+      messages.push({ role: msg.role, content: msg.content });
     }
   }
 
-  // Add the new user message
-  if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-    messages[messages.length - 1].content += '\n\n' + userMessage;
-  } else {
-    messages.push({ role: 'user', content: userMessage });
+  // Build the user message, including context about other personas' responses this turn
+  let fullUserMessage = userMessage;
+
+  if (turnResponses.length > 0) {
+    const context = turnResponses
+      .map((r) => `${r.name}: "${r.content}"`)
+      .join('\n\n');
+    fullUserMessage += `\n\n[Other companions have already responded to this message:]\n${context}\n\n[It is now your turn. Write only your own response.]`;
   }
 
-  // Add current-turn responses if any
-  if (turnResponses.length > 0) {
-    const combined = turnResponses
-      .map((r) => `[${r.name}]: ${r.content}`)
-      .join('\n\n');
-    messages.push({ role: 'assistant', content: combined });
-    messages.push({
-      role: 'user',
-      content: '[Continue the group discussion. It is now your turn to respond.]',
-    });
+  // Add the user message
+  if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+    messages[messages.length - 1].content += '\n\n' + fullUserMessage;
+  } else {
+    messages.push({ role: 'user', content: fullUserMessage });
   }
 
   return messages;
@@ -146,12 +190,15 @@ async function streamPersonaResponse(
   systemPrompt: string,
   apiMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
   personaId: string,
+  personaName: string,
   emit: (event: RoomStreamEvent) => void,
   signal: AbortSignal
 ): Promise<string> {
+  const temperature = PERSONA_TEMPERATURES[personaName] ?? 0.5;
   const stream = anthropic.messages.stream({
     model: MODEL_NAME,
     max_tokens: ROOM_MAX_RESPONSE_TOKENS,
+    temperature,
     system: systemPrompt,
     messages: apiMessages,
   });
@@ -196,11 +243,13 @@ export async function POST(req: Request) {
   req.signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
-    const { message } = await req.json();
+    const { message, mutedPersonaIds = [] } = await req.json();
 
     if (!message) {
       return Response.json({ error: 'message is required' }, { status: 400 });
     }
+
+    const mutedSet = new Set<string>(mutedPersonaIds);
 
     const supabase = createServerClient();
     const anthropic = getAnthropicClient();
@@ -227,22 +276,38 @@ export async function POST(req: Request) {
       .order('created_at', { ascending: true });
 
     const history: RoomHistoryMsg[] = (historyRows || []).slice(0, -1).map((row: Record<string, unknown>) => {
-      const persona = row.personas as { name: string } | null;
+      const rowPersona = row.personas as { name: string } | null;
+      let content = row.content as string;
+
+      // Clean old contaminated history — truncate at first sign of another persona
+      if (row.role === 'assistant' && rowPersona) {
+        const thisPersona = (personas as Persona[]).find((p) => p.name === rowPersona.name);
+        if (thisPersona) {
+          content = cleanPersonaResponse(content, thisPersona, personas as Persona[]);
+        }
+      }
+
       return {
         role: row.role as 'user' | 'assistant',
-        content: row.content as string,
-        persona_name: persona?.name ?? null,
+        content,
+        persona_name: rowPersona?.name ?? null,
       };
     });
 
-    // 4. Parse @-mentions
+    // 4. Parse @-mentions and filter muted personas
     const mentions = parseMentions(message, personas as Persona[]);
+    const activePersonas = (personas as Persona[]).filter((p) => !mutedSet.has(p.id));
+    const MAX_INITIAL_RESPONDERS = 3;
     const respondingPersonas: Persona[] =
       mentions.length > 0
-        ? (personas as Persona[]).filter((p) =>
+        ? activePersonas.filter((p) =>
             mentions.includes(p.name.toLowerCase())
           )
-        : shuffleArray(personas as Persona[]);
+        : shuffleArray(activePersonas).slice(0, MAX_INITIAL_RESPONDERS);
+
+    if (respondingPersonas.length === 0) {
+      return Response.json({ error: 'No active personas to respond' }, { status: 400 });
+    }
 
     // 5. Stream
     const encoder = new TextEncoder();
@@ -265,6 +330,9 @@ export async function POST(req: Request) {
           // --- INITIAL ROUND ---
           for (let i = 0; i < respondingPersonas.length; i++) {
             if (controller.signal.aborted) break;
+
+            // Natural delay between personas (not before the first one)
+            if (i > 0) await delay(800 + Math.random() * 700);
 
             const persona = respondingPersonas[i];
             const isLast = i === respondingPersonas.length - 1;
@@ -290,14 +358,16 @@ export async function POST(req: Request) {
               ROOM_AVAILABLE_TOKENS
             );
 
-            const response = await streamPersonaResponse(
+            const rawResponse = await streamPersonaResponse(
               anthropic,
               systemPrompt,
               apiMessages,
               persona.id,
+              persona.name,
               emit,
               controller.signal
             );
+            const response = cleanPersonaResponse(rawResponse, persona, personas as Persona[]);
 
             if (isPass(response) && !allOthersPassed) {
               passedPersonaIds.push(persona.id);
@@ -321,14 +391,16 @@ export async function POST(req: Request) {
                 persona_emoji: persona.emoji,
               });
 
-              const forcedResponse = await streamPersonaResponse(
+              const rawForced = await streamPersonaResponse(
                 anthropic,
                 forcePrompt,
                 apiMessages,
                 persona.id,
+                persona.name,
                 emit,
                 controller.signal
               );
+              const forcedResponse = cleanPersonaResponse(rawForced, persona, personas as Persona[]);
 
               const { data: saved } = await supabase
                 .from('room_messages')
@@ -389,12 +461,23 @@ export async function POST(req: Request) {
           ) {
             emit({ type: 'followup_start' });
 
+            // Get the last persona who responded — exclude them from being first follow-up
+            const lastResponderId = turnResponses[turnResponses.length - 1].persona_id;
             const nonPassIds = turnResponses.map((r) => r.persona_id);
-            const candidates = shuffleArray(
-              (personas as Persona[]).filter((p) => nonPassIds.includes(p.id))
+            const eligibleForFirst = (personas as Persona[]).filter(
+              (p) => nonPassIds.includes(p.id) && p.id !== lastResponderId
+            );
+            const restCandidates = (personas as Persona[]).filter(
+              (p) => nonPassIds.includes(p.id) && p.id === lastResponderId
             );
 
-            const followupCount = Math.random() < 0.7 ? 1 : 2;
+            // First pick from non-last-responder, then append the last responder
+            const candidates = [
+              ...shuffleArray(eligibleForFirst),
+              ...shuffleArray(restCandidates),
+            ];
+
+            const followupCount = 1;
             const followupPersonas = candidates.slice(
               0,
               Math.min(followupCount, candidates.length)
@@ -402,6 +485,9 @@ export async function POST(req: Request) {
 
             for (const persona of followupPersonas) {
               if (controller.signal.aborted) break;
+
+              // Delay before follow-up
+              await delay(1000 + Math.random() * 500);
 
               emit({
                 type: 'persona_start',
@@ -422,14 +508,16 @@ export async function POST(req: Request) {
                 ROOM_AVAILABLE_TOKENS
               );
 
-              const response = await streamPersonaResponse(
+              const rawFollowup = await streamPersonaResponse(
                 anthropic,
                 systemPrompt,
                 apiMessages,
                 persona.id,
+                persona.name,
                 emit,
                 controller.signal
               );
+              const response = cleanPersonaResponse(rawFollowup, persona, personas as Persona[]);
 
               const { data: saved } = await supabase
                 .from('room_messages')

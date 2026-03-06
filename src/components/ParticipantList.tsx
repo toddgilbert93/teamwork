@@ -72,6 +72,12 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
             })
           )}
         </div>
+
+        <div className="px-4 py-3 flex-shrink-0 border-t border-gray-200/40">
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            Room conversations are not saved to companion memories.
+          </p>
+        </div>
       </div>
     </aside>
   );

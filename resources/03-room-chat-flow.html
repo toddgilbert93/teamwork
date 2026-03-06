@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Room Chat — Multi-Persona Prompt Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 40px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { text-align: center; font-size: 26px; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 40px; }
+
+  .phase { margin-bottom: 36px; }
+  .phase-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .phase-badge { padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .phase-title { font-size: 18px; font-weight: 700; }
+
+  .step { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px 20px; margin-bottom: 8px; display: flex; gap: 14px; }
+  .step-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .step-content { flex: 1; }
+  .step-title { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+  .step-detail { font-size: 12px; color: #94a3b8; line-height: 1.6; }
+  .step-detail code { background: #0f172a; padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 11px; color: #60a5fa; }
+
+  .loop-box { border: 2px dashed #7c3aed; border-radius: 14px; padding: 20px; margin: 16px 0; position: relative; }
+  .loop-label { position: absolute; top: -11px; left: 20px; background: #0f172a; padding: 0 10px; font-size: 12px; color: #a78bfa; font-weight: 700; }
+
+  .payload { background: #0f172a; border: 2px solid #7c3aed; border-radius: 12px; padding: 20px; margin: 16px 0; }
+  .payload-title { font-size: 15px; font-weight: 700; color: #a78bfa; margin-bottom: 14px; }
+  .payload-section { margin-bottom: 12px; }
+  .payload-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #7c3aed; margin-bottom: 5px; }
+  .payload-content { background: #1e293b; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 11px; line-height: 1.7; color: #cbd5e1; white-space: pre-wrap; }
+  .key { color: #a78bfa; }
+  .val { color: #4ade80; }
+  .comment { color: #475569; }
+  .hl { background: #422006; padding: 1px 4px; border-radius: 3px; color: #fbbf24; }
+
+  .divider { border: none; border-top: 1px dashed #334155; margin: 28px 0; }
+
+  .note { background: #1e293b; border-left: 3px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 16px 0; font-size: 12px; color: #94a3b8; }
+  .note strong { color: #fbbf24; }
+
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .col-box { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+  .col-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .col-detail { font-size: 12px; color: #94a3b8; line-height: 1.6; }
+
+  .badge-blue { background: #1e3a5f; color: #60a5fa; }
+  .badge-green { background: #14532d; color: #4ade80; }
+  .badge-purple { background: #3b1f5e; color: #a78bfa; }
+  .badge-amber { background: #422006; color: #fbbf24; }
+  .badge-red { background: #450a0a; color: #f87171; }
+
+  .icon-blue { background: #1e3a5f; color: #60a5fa; }
+  .icon-green { background: #14532d; color: #4ade80; }
+  .icon-purple { background: #3b1f5e; color: #a78bfa; }
+  .icon-amber { background: #422006; color: #fbbf24; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Room Group Chat — Full Prompt Flow</h1>
+  <p class="subtitle">POST /api/room/chat — Multiple sequential Anthropic API calls, one per responding persona</p>
+
+  <!-- PHASE 1: Setup -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-blue">Phase 1</span>
+      <span class="phase-title">Data Gathering</span>
+    </div>
+    <div class="step">
+      <div class="step-icon icon-blue">1</div>
+      <div class="step-content">
+        <div class="step-title">Save user message to Supabase</div>
+        <div class="step-detail">Inserted into <code>room_messages</code> with <code>persona_id: null</code>, <code>role: 'user'</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-icon icon-blue">2</div>
+      <div class="step-content">
+        <div class="step-title">Fetch all personas</div>
+        <div class="step-detail">All personas ordered by <code>sort_order</code>. Each has: <code>system_prompt</code>, <code>memory_summary</code>, <code>name</code>, <code>emoji</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-icon icon-blue">3</div>
+      <div class="step-content">
+        <div class="step-title">Fetch room message history</div>
+        <div class="step-detail">All <code>room_messages</code> with joined persona data. Old contaminated responses are cleaned (truncated at first sign of another persona's name). Excludes the just-inserted user message.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2: Persona Selection -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-green">Phase 2</span>
+      <span class="phase-title">Persona Selection</span>
+    </div>
+    <div class="columns">
+      <div class="col-box">
+        <div class="col-title">With @-mentions</div>
+        <div class="col-detail">
+          If the user message contains <code>@Name</code>, only those mentioned personas respond (filtered through active/unmuted list).
+        </div>
+      </div>
+      <div class="col-box">
+        <div class="col-title">Without @-mentions</div>
+        <div class="col-detail">
+          Active (non-muted) personas are shuffled randomly, then the first <strong>3</strong> are selected (<code>MAX_INITIAL_RESPONDERS = 3</code>).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 3: Initial Round -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-purple">Phase 3</span>
+      <span class="phase-title">Initial Response Round</span>
+    </div>
+
+    <div class="loop-box">
+      <span class="loop-label">FOR EACH selected persona (sequential, with 800–1500ms delays)</span>
+
+      <div class="step">
+        <div class="step-icon icon-amber">A</div>
+        <div class="step-content">
+          <div class="step-title">Build system prompt via <code>buildRoomSystemPrompt()</code></div>
+          <div class="step-detail">See detailed payload below. Includes identity, memory, group rules, and pass/force instructions.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-icon icon-amber">B</div>
+        <div class="step-content">
+          <div class="step-title">Build messages via <code>buildAnthropicMessages()</code></div>
+          <div class="step-detail">
+            Merges room history + prior turn responses into the user message.<br>
+            Applied through <code>applyRoomWindow()</code> to fit within <strong>60,000 tokens</strong>.
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-icon icon-purple">C</div>
+        <div class="step-content">
+          <div class="step-title">Call Anthropic API (streaming)</div>
+          <div class="step-detail"><code>anthropic.messages.stream()</code> — one call per persona</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-icon icon-green">D</div>
+        <div class="step-content">
+          <div class="step-title">Clean response + handle "pass"</div>
+          <div class="step-detail">
+            <code>cleanPersonaResponse()</code> strips own-name prefixes, XML tags, and truncates at other persona names.<br>
+            If response is "pass" and not all others passed → skip this persona.<br>
+            If ALL personas passed → <strong>retry last persona with <code>forceRespond=true</code></strong> (another API call!).
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- THE API CALL PAYLOAD -->
+  <div class="payload">
+    <div class="payload-title">Anthropic API Call — Per Persona in Room</div>
+
+    <div class="payload-section">
+      <div class="payload-label">Request Parameters</div>
+      <div class="payload-content"><span class="key">model:</span>      <span class="val">"claude-sonnet-4-20250514"</span>
+<span class="key">max_tokens:</span> <span class="val">300</span>                                  <span class="comment">// much shorter than 1:1</span>
+<span class="key">temperature:</span> <span class="val">0.3–0.9</span>                              <span class="comment">// per persona name</span>
+<span class="key">system:</span>      <span class="hl">⬇ constructed system prompt</span>
+<span class="key">messages:</span>    <span class="hl">⬇ room history + turn context</span></div>
+    </div>
+
+    <div class="payload-section">
+      <div class="payload-label">system (string) — buildRoomSystemPrompt()</div>
+      <div class="payload-content"><span class="val">## Your Identity
+{persona.system_prompt}
+
+## Private Memory                                <span class="comment">// only if memory_summary exists</span>
+Here is what you know about the user from your private conversations:
+{persona.memory_summary}
+
+## Group Discussion Context
+You are in a group discussion with the user and these other companions: 🌞 Sol, 🦖 Rex, 🔮 Mira.
+IMPORTANT: You are ONLY {persona.name}. Respond ONLY as yourself.
+NEVER generate text on behalf of other personas.
+Do NOT prefix your response with your name or anyone else's name.
+Just write your response directly — attribution is handled by the system.
+Keep your response very short — 1 to 2 sentences max.
+Do NOT agree with or rephrase what another persona just said.
+If you agree, pass. Only respond if you have a genuinely different angle.
+You can reference other personas by name when responding to their points.
+If you have nothing meaningful to add, respond with just "pass".
+</span>
+<span class="comment">// If forceRespond=true, replaces last line with:</span>
+<span class="val">You must respond to this message — do not pass.</span>
+
+<span class="comment">// If isFollowUp=true, adds:</span>
+<span class="val">## Follow-Up Instructions
+Respond to or build on something one of the other personas just said.
+Do not repeat your earlier point. One sentence only.</span></div>
+    </div>
+
+    <div class="payload-section">
+      <div class="payload-label">messages (array) — buildAnthropicMessages() + applyRoomWindow()</div>
+      <div class="payload-content"><span class="comment">// Room history (consecutive same-role messages merged)</span>
+<span class="val">[
+  { role: "user",      content: "earlier user message" },
+  { role: "assistant", content: "Sol response\n\nRex response" },
+  { role: "user",      content: "another user message" },
+  ...
+  { role: "user",      content: "<span class="hl">current message + turn context ⬇</span>" }
+]</span>
+
+<span class="comment">// The final user message includes prior turn responses:</span>
+<span class="val">"What do you think about AI?"
+
+[Other companions have already responded to this message:]
+Sol: "I think AI is fascinating because..."
+Rex: "The practical applications are what interest me..."
+
+[It is now your turn. Write only your own response.]</span>
+
+<span class="comment">// All windowed to fit within 60,000 tokens</span></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- PHASE 4: Follow-Up -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-badge badge-amber">Phase 4</span>
+      <span class="phase-title">Follow-Up Round (50% chance)</span>
+    </div>
+    <div class="note">
+      <strong>Conditions:</strong> No @-mentions were used, at least 2 personas responded (didn't pass), and <code>Math.random() < 0.5</code>.<br>
+      <strong>Selection:</strong> 1 persona chosen from initial responders, preferring someone other than whoever spoke last.<br>
+      <strong>System prompt:</strong> Same as initial round but with <code>isFollowUp=true</code> and <code>forceRespond=true</code>.<br>
+      <strong>This adds 1 more streaming API call.</strong>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="note">
+    <strong>API calls per user message in Room Chat:</strong><br>
+    • Minimum: <strong>1</strong> (1 persona selected, responds without passing)<br>
+    • Typical: <strong>3</strong> (3 personas each make 1 call)<br>
+    • With follow-up: <strong>4</strong> (3 initial + 1 follow-up)<br>
+    • Maximum: <strong>~5-6</strong> (3 initial + forced retry if all pass + follow-up)<br>
+    • All calls use <strong>max_tokens: 300</strong> (vs 4096 in 1:1 chat)
+  </div>
+</div>
+</body>
+</html>

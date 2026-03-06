@@ -1,7 +1,6 @@
 'use client';
 
 import { useAppStore } from '@/stores/app-store';
-import { RoomHeader } from './RoomHeader';
 import { RoomMessageList } from './RoomMessageList';
 import { RoomInput } from './RoomInput';
 import type { Persona, RoomMessage } from '@/lib/types';
@@ -21,12 +20,11 @@ export function RoomArea({
   onSendMessage,
   onAbort,
 }: RoomAreaProps) {
-  const { roomIsStreaming, roomStreamingText, roomStreamingPersonaId, roomTopic } =
+  const { roomIsStreaming, roomStreamingText, roomStreamingPersonaId } =
     useAppStore();
 
   return (
     <div className="flex-1 flex flex-col h-full relative min-w-0">
-      <RoomHeader personas={personas} topic={roomTopic} />
 
       <RoomMessageList
         messages={messages}

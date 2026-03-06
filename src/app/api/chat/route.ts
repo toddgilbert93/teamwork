@@ -5,6 +5,13 @@ import { applyWindowToMessages } from '@/lib/tokens';
 import { generateMemorySummary } from '@/lib/memory';
 import type { Message } from '@/lib/types';
 
+const PERSONA_TEMPERATURES: Record<string, number> = {
+  'Sol': 0.3,
+  'Rex': 0.5,
+  'Mira': 0.7,
+  'Mean guy': 0.9,
+};
+
 export async function POST(req: Request) {
   try {
     const { persona_id, message } = await req.json();
@@ -84,9 +91,11 @@ export async function POST(req: Request) {
     }));
 
     // 9. Stream response
+    const temperature = PERSONA_TEMPERATURES[persona.name] ?? 0.5;
     const stream = anthropic.messages.stream({
       model: MODEL_NAME,
       max_tokens: MAX_RESPONSE_TOKENS,
+      temperature,
       system: systemPrompt,
       messages: apiMessages,
     });
