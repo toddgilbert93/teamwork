@@ -5,9 +5,13 @@ import { useAppStore } from '@/stores/app-store';
 import { usePersonas } from '@/hooks/usePersonas';
 import { useMessages } from '@/hooks/useMessages';
 import { useChat } from '@/hooks/useChat';
+import { useRoomMessages } from '@/hooks/useRoomMessages';
+import { useRoomChat } from '@/hooks/useRoomChat';
 import { TopBar } from '@/components/TopBar';
 import { Sidebar } from '@/components/Sidebar';
 import { ChatArea } from '@/components/ChatArea';
+import { RoomArea } from '@/components/RoomArea';
+import { ParticipantList } from '@/components/ParticipantList';
 import { PersonaForm } from '@/components/PersonaForm';
 import { MemoryModal } from '@/components/MemoryModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -24,11 +28,26 @@ export default function Home() {
     setShowMemoryModal,
     showConfirmClear,
     setShowConfirmClear,
+    showRoomResetConfirm,
+    setShowRoomResetConfirm,
     activeTab,
   } = useAppStore();
 
   const { personas, loading: personasLoading, refetch: refetchPersonas, createPersona, updatePersona, deletePersona } = usePersonas();
   const { messages, loading: messagesLoading, addMessage, clearMessages } = useMessages(activePersonaId);
+
+  // Room hooks
+  const {
+    messages: roomMessages,
+    loading: roomMessagesLoading,
+    addMessage: addRoomMessage,
+    clearMessages: clearRoomMessages,
+  } = useRoomMessages();
+
+  const { sendMessage: sendRoomMessage, abort: abortRoom } = useRoomChat({
+    personas,
+    onMessageAdded: addRoomMessage,
+  });
 
   // Auto-select the most recently interacted persona on initial load
   const hasAutoSelected = useRef(false);
@@ -98,6 +117,11 @@ export default function Home() {
     refetchPersonas();
   };
 
+  const handleRoomReset = async () => {
+    await clearRoomMessages();
+    setShowRoomResetConfirm(false);
+  };
+
   return (
     <div
       className="h-screen w-screen flex items-center justify-center p-4 sm:p-6 md:p-10"
@@ -116,28 +140,42 @@ export default function Home() {
         <TopBar />
 
         <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar / Participant list */}
           {activeTab === 'chat' && (
             <Sidebar personas={personas} loading={personasLoading} />
           )}
-
-          {activeTab === 'chat' ? (
-            <ChatArea
-              persona={activePersona}
-              messages={messages}
-              messagesLoading={messagesLoading}
-              onSendMessage={sendMessage}
-              onAbort={abort}
-              onRefreshPersonas={handleRefreshPersonas}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-              <div className="text-5xl mb-4 opacity-80">🏠</div>
-              <h2 className="text-lg font-semibold text-gray-800 mb-1">Room</h2>
-              <p className="text-sm text-gray-500 max-w-xs">
-                Coming soon. This is where shared spaces will live.
-              </p>
-            </div>
+          {activeTab === 'room' && (
+            <ParticipantList personas={personas} loading={personasLoading} />
           )}
+
+          {/* Main content with crossfade */}
+          <div className="flex-1 relative min-w-0">
+            <div
+              className={`absolute inset-0 flex flex-col transition-opacity duration-200
+                ${activeTab === 'chat' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+            >
+              <ChatArea
+                persona={activePersona}
+                messages={messages}
+                messagesLoading={messagesLoading}
+                onSendMessage={sendMessage}
+                onAbort={abort}
+                onRefreshPersonas={handleRefreshPersonas}
+              />
+            </div>
+            <div
+              className={`absolute inset-0 flex flex-col transition-opacity duration-200
+                ${activeTab === 'room' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}
+            >
+              <RoomArea
+                personas={personas}
+                messages={roomMessages}
+                messagesLoading={roomMessagesLoading}
+                onSendMessage={sendRoomMessage}
+                onAbort={abortRoom}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -176,6 +214,16 @@ export default function Home() {
         }}
         onConfirm={() => handleClearHistory(false)}
         onCancel={() => setShowConfirmClear(false)}
+      />
+
+      <ConfirmDialog
+        open={showRoomResetConfirm}
+        title="Reset Room?"
+        message="This will clear all Room conversation history. This cannot be undone."
+        confirmLabel="Reset"
+        variant="danger"
+        onConfirm={handleRoomReset}
+        onCancel={() => setShowRoomResetConfirm(false)}
       />
     </div>
   );

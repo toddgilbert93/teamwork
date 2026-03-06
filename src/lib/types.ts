@@ -27,3 +27,32 @@ export interface StreamEvent {
   text?: string;
   message?: string;
 }
+
+export interface RoomMessage {
+  id: string;
+  persona_id: string | null;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+  persona_name?: string;
+  persona_emoji?: string;
+  persona_accent_color?: string;
+}
+
+export interface RoomStreamEvent {
+  type:
+    | 'persona_start'
+    | 'text_delta'
+    | 'persona_complete'
+    | 'persona_pass'
+    | 'turn_complete'
+    | 'followup_start'
+    | 'all_complete'
+    | 'error';
+  persona_id?: string;
+  persona_name?: string;
+  persona_emoji?: string;
+  text?: string;
+  message_id?: string;
+  message?: string;
+}
