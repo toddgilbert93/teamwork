@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/auth';
 import { getAnthropicClient } from '@/lib/anthropic';
 import { MODEL_NAME } from '@/lib/constants';
 import { estimateTokens } from '@/lib/tokens';
@@ -252,7 +253,7 @@ export async function POST(req: Request) {
     const mutedSet = new Set<string>(mutedPersonaIds);
 
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(supabase);
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }

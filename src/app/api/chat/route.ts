@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { getAuthUser, userIdField } from '@/lib/auth';
 import { getAnthropicClient } from '@/lib/anthropic';
 import { MODEL_NAME, MAX_RESPONSE_TOKENS, AVAILABLE_FOR_MESSAGES } from '@/lib/constants';
 import { applyWindowToMessages } from '@/lib/tokens';
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
     }
 
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(supabase);
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     // 3. Save user message
     const { error: insertError } = await supabase
       .from('messages')
-      .insert({ persona_id, role: 'user', content: message, user_id: user.id });
+      .insert({ persona_id, role: 'user', content: message, ...userIdField(user) });
 
     if (insertError) {
       return Response.json({ error: insertError.message }, { status: 500 });
@@ -122,7 +123,7 @@ export async function POST(req: Request) {
             // Save assistant response to Supabase
             const { data: savedMsg } = await supabase
               .from('messages')
-              .insert({ persona_id, role: 'assistant', content: fullResponse, user_id: user.id })
+              .insert({ persona_id, role: 'assistant', content: fullResponse, ...userIdField(user) })
               .select('id')
               .single();
 
