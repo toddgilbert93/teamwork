@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createBrowserClient } from '@/lib/supabase/client';
 import type { Persona } from '@/lib/types';
 
 export function usePersonas() {

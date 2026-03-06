@@ -20,7 +20,12 @@ export async function POST(req: Request) {
       return Response.json({ error: 'persona_id and message are required' }, { status: 400 });
     }
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const anthropic = getAnthropicClient();
 
     // 1. Fetch persona
@@ -48,7 +53,7 @@ export async function POST(req: Request) {
     // 3. Save user message
     const { error: insertError } = await supabase
       .from('messages')
-      .insert({ persona_id, role: 'user', content: message });
+      .insert({ persona_id, role: 'user', content: message, user_id: user.id });
 
     if (insertError) {
       return Response.json({ error: insertError.message }, { status: 500 });
@@ -117,7 +122,7 @@ export async function POST(req: Request) {
             // Save assistant response to Supabase
             const { data: savedMsg } = await supabase
               .from('messages')
-              .insert({ persona_id, role: 'assistant', content: fullResponse })
+              .insert({ persona_id, role: 'assistant', content: fullResponse, user_id: user.id })
               .select('id')
               .single();
 

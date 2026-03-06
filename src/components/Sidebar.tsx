@@ -1,8 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
+import { createBrowserClient } from '@/lib/supabase/client';
 import { PersonaCard } from './PersonaCard';
+import { LogOut } from 'lucide-react';
 import type { Persona } from '@/lib/types';
 
 interface SidebarProps {
@@ -17,6 +20,13 @@ export function Sidebar({ personas, loading }: SidebarProps) {
     sidebarOpen,
     setShowNewPersonaForm,
   } = useAppStore();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   // Sort personas by most recent interaction
   const sortedPersonas = useMemo(() => {
@@ -73,8 +83,8 @@ export function Sidebar({ personas, loading }: SidebarProps) {
           )}
         </div>
 
-        {/* Add button at bottom */}
-        <div className="px-2 pb-3 pt-1 flex-shrink-0">
+        {/* Add button and sign out at bottom */}
+        <div className="px-2 pb-3 pt-1 flex-shrink-0 space-y-1">
           <button
             onClick={() => setShowNewPersonaForm(true)}
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl
@@ -82,6 +92,14 @@ export function Sidebar({ personas, loading }: SidebarProps) {
           >
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 text-xs">+</span>
             New companion
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl
+                     text-sm text-gray-400 hover:text-gray-600 hover:bg-black/[0.04] transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
           </button>
         </div>
       </div>

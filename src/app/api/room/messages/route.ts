@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 
 export async function GET() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from('room_messages')
@@ -36,7 +40,11 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { error } = await supabase
     .from('room_messages')

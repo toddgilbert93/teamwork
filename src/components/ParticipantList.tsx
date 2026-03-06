@@ -1,6 +1,9 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
+import { createBrowserClient } from '@/lib/supabase/client';
+import { LogOut } from 'lucide-react';
 import type { Persona } from '@/lib/types';
 
 interface ParticipantListProps {
@@ -10,6 +13,13 @@ interface ParticipantListProps {
 
 export function ParticipantList({ personas, loading }: ParticipantListProps) {
   const { sidebarOpen, mutedPersonaIds, toggleMutedPersona } = useAppStore();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   return (
     <aside
@@ -73,10 +83,18 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
           )}
         </div>
 
-        <div className="px-4 py-3 flex-shrink-0 border-t border-gray-200/40">
-          <p className="text-[11px] text-gray-400 leading-relaxed">
+        <div className="px-2 py-3 flex-shrink-0 border-t border-gray-200/40 space-y-2">
+          <p className="text-[11px] text-gray-400 leading-relaxed px-2">
             Room conversations are not saved to companion memories.
           </p>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl
+                     text-sm text-gray-400 hover:text-gray-600 hover:bg-black/[0.04] transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
         </div>
       </div>
     </aside>

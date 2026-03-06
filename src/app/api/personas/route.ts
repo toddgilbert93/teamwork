@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 
 export async function GET() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { data, error } = await supabase.rpc('get_personas_with_last_message');
 
@@ -14,7 +18,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const body = await req.json();
   const { name, emoji, accent_color, tagline, personality } = body;
 
@@ -44,6 +53,7 @@ export async function POST(req: Request) {
       system_prompt,
       tagline: tagline || null,
       sort_order,
+      user_id: user.id,
     })
     .select()
     .single();

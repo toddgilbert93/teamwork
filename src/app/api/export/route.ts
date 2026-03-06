@@ -9,7 +9,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'persona_id is required' }, { status: 400 });
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   // Fetch persona
   const { data: persona, error: personaError } = await supabase

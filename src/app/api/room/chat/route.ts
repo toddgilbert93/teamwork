@@ -251,13 +251,18 @@ export async function POST(req: Request) {
 
     const mutedSet = new Set<string>(mutedPersonaIds);
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const anthropic = getAnthropicClient();
 
     // 1. Save user message
     await supabase
       .from('room_messages')
-      .insert({ persona_id: null, role: 'user', content: message });
+      .insert({ persona_id: null, role: 'user', content: message, user_id: user.id });
 
     // 2. Fetch all personas
     const { data: personas, error: personasError } = await supabase
@@ -408,6 +413,7 @@ export async function POST(req: Request) {
                   persona_id: persona.id,
                   role: 'assistant',
                   content: forcedResponse,
+                  user_id: user.id,
                 })
                 .select('id')
                 .single();
@@ -433,6 +439,7 @@ export async function POST(req: Request) {
                 persona_id: persona.id,
                 role: 'assistant',
                 content: response,
+                user_id: user.id,
               })
               .select('id')
               .single();
@@ -525,6 +532,7 @@ export async function POST(req: Request) {
                   persona_id: persona.id,
                   role: 'assistant',
                   content: response,
+                  user_id: user.id,
                 })
                 .select('id')
                 .single();
