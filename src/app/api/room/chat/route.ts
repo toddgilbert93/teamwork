@@ -363,10 +363,11 @@ export async function POST(req: Request) {
     const mutedSet = new Set<string>(mutedPersonaIds);
 
     const supabase = await createServerClient();
-    const user = await getAuthUser(supabase);
-    if (!user) {
+    const maybeUser = await getAuthUser(supabase);
+    if (!maybeUser) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const user: { id: string } = maybeUser;
 
     // 1. Save user message
     await supabase
