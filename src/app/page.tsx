@@ -137,7 +137,7 @@ export default function Home() {
       {/* App card */}
       <div className="relative w-full h-full max-w-6xl sm:max-h-[900px] flex flex-col
                       rounded-none sm:rounded-2xl overflow-hidden
-                      bg-[#faf9f6] sm:bg-[#faf9f6]/90 sm:backdrop-blur-xl
+                      bg-white
                       shadow-none sm:shadow-2xl sm:shadow-black/20
                       ring-0 sm:ring-1 sm:ring-black/10">
         <TopBar />
@@ -209,12 +209,8 @@ export default function Home() {
         open={showConfirmClear}
         title="Clear conversation?"
         message={`This will delete all messages with ${activePersona?.name || 'this persona'}. This cannot be undone.`}
-        confirmLabel="Clear without saving"
+        confirmLabel="Clear conversation"
         variant="danger"
-        extraAction={{
-          label: 'Save memory, then clear',
-          onClick: () => handleClearHistory(true),
-        }}
         onConfirm={() => handleClearHistory(false)}
         onCancel={() => setShowConfirmClear(false)}
       />

@@ -1,17 +1,23 @@
+import { streamText } from 'ai';
 import { createServerClient } from '@/lib/supabase/server';
 import { getAuthUser, userIdField } from '@/lib/auth';
-import { getAnthropicClient } from '@/lib/anthropic';
-import { MODEL_NAME, MAX_RESPONSE_TOKENS, AVAILABLE_FOR_MESSAGES } from '@/lib/constants';
+import { getModel } from '@/lib/ai';
+import { MAX_RESPONSE_TOKENS, AVAILABLE_FOR_MESSAGES } from '@/lib/constants';
 import { applyWindowToMessages } from '@/lib/tokens';
 import { generateMemorySummary } from '@/lib/memory';
+import { resolveSystemPrompt } from '@/lib/default-personas';
 import type { Message } from '@/lib/types';
 
 const PERSONA_TEMPERATURES: Record<string, number> = {
-  'Sol': 0.3,
-  'Rex': 0.5,
-  'Mira': 0.7,
-  'Mean guy': 0.9,
-  'Atlas': 0.8,
+  'Rex': 0.3,
+  'Sol': 0.6,
+  'Mira': 0.9,
+};
+
+const PERSONA_CHAT_STYLE: Record<string, string> = {
+  'Sol': 'Keep responses conversational and concise by default. Go deeper when the topic warrants it, but don\'t over-explain. Have genuine opinions. Push back when you disagree. You\'re not here to validate — you\'re here to help them win.',
+  'Mira': 'Keep responses conversational and concise by default. Go deeper when the topic calls for it, but don\'t lecture. Have genuine perspectives. Push back gently when you see something they\'re missing. You\'re here to help them see clearly.',
+  'Rex': 'Keep responses short by default. You\'re not a monologue person. One sharp paragraph beats three gentle ones. Have strong opinions. Don\'t hedge. If you agree with someone, don\'t just say "yeah" — add something they hadn\'t considered. You\'re here to make them sharper.',
 };
 
 export async function POST(req: Request) {
@@ -27,8 +33,6 @@ export async function POST(req: Request) {
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const anthropic = getAnthropicClient();
 
     // 1. Fetch persona
     const { data: persona, error: personaError } = await supabase
@@ -88,13 +92,17 @@ export async function POST(req: Request) {
         .catch(console.error);
     }
 
-    // 7. Build system prompt with memory
-    let systemPrompt = persona.system_prompt;
+    // 7. Build system prompt with memory (code is source of truth for defaults)
+    let systemPrompt = resolveSystemPrompt(persona);
+    const chatStyle = PERSONA_CHAT_STYLE[persona.name];
+    if (chatStyle) {
+      systemPrompt += `\n\n${chatStyle}`;
+    }
     if (persona.memory_summary) {
       systemPrompt = `## Conversation Memory\nThe following is a summary of earlier conversations with this user:\n\n${persona.memory_summary}\n\n---\n\n## Your Identity\n${systemPrompt}`;
     }
 
-    // 8. Format messages for Anthropic API
+    // 8. Format messages for API
     const apiMessages = windowed.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -102,9 +110,11 @@ export async function POST(req: Request) {
 
     // 9. Stream response
     const temperature = PERSONA_TEMPERATURES[persona.name] ?? 0.5;
-    const stream = anthropic.messages.stream({
-      model: MODEL_NAME,
-      max_tokens: MAX_RESPONSE_TOKENS,
+    const model = getModel(persona.name);
+
+    const result = streamText({
+      model,
+      maxOutputTokens: MAX_RESPONSE_TOKENS,
       temperature,
       system: systemPrompt,
       messages: apiMessages,
@@ -116,39 +126,27 @@ export async function POST(req: Request) {
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          stream.on('text', (text) => {
-            fullResponse += text;
+          for await (const chunk of result.textStream) {
+            fullResponse += chunk;
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: 'text_delta', text })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ type: 'text_delta', text: chunk })}\n\n`)
             );
-          });
+          }
 
-          stream.on('end', async () => {
-            // Save assistant response to Supabase
-            const { data: savedMsg } = await supabase
-              .from('messages')
-              .insert({ persona_id, role: 'assistant', content: fullResponse, ...userIdField(user) })
-              .select('id')
-              .single();
+          // Save assistant response to Supabase
+          const { data: savedMsg } = await supabase
+            .from('messages')
+            .insert({ persona_id, role: 'assistant', content: fullResponse, ...userIdField(user) })
+            .select('id')
+            .single();
 
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: 'message_complete',
-                message_id: savedMsg?.id,
-              })}\n\n`)
-            );
-            controller.close();
-          });
-
-          stream.on('error', (error) => {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: 'error',
-                message: error instanceof Error ? error.message : 'Stream error',
-              })}\n\n`)
-            );
-            controller.close();
-          });
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'message_complete',
+              message_id: savedMsg?.id,
+            })}\n\n`)
+          );
+          controller.close();
         } catch (err) {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({

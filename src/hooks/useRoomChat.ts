@@ -83,7 +83,6 @@ export function useRoomChat({ personas, onMessageAdded }: UseRoomChatOptions) {
 
                 case 'text_delta':
                   currentPersonaAccumulator += data.text ?? '';
-                  appendRoomStreamingText(data.text ?? '');
                   break;
 
                 case 'persona_complete': {

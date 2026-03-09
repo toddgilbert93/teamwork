@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { getDefaultDescription } from '@/lib/default-personas';
 import type { Persona } from '@/lib/types';
 
 const EmojiPicker = dynamic(() => import('@emoji-mart/react').then((mod) => mod.default), {
@@ -121,7 +122,7 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 overflow-y-auto flex-1" style={{ overflow: showEmojiPicker ? 'visible' : undefined }}>
         <h3 className="font-semibold text-gray-900 mb-5">
-          {isViewOnly ? 'View Companion' : isEditing ? 'Edit Persona' : 'New Companion'}
+          {isViewOnly ? 'View Member' : isEditing ? 'Edit Persona' : 'New Member'}
         </h3>
 
         {isViewOnly ? (
@@ -146,12 +147,11 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
               />
             </div>
 
-            {/* System Prompt */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">System Prompt</label>
-              <div className="w-full max-h-64 overflow-y-auto rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {personality}
-              </div>
+            {/* Personality description */}
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {getDefaultDescription(persona?.name ?? '') ?? personality}
+              </p>
             </div>
 
             {/* Close button */}
@@ -360,7 +360,7 @@ export function PersonaForm({ open, persona, onSave, onDelete, onClose }: Person
                 className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-medium
                          hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Companion'}
+                {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Member'}
               </button>
             </div>
           </div>

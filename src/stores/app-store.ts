@@ -54,7 +54,7 @@ export const useAppStore = create<AppState>((set) => ({
   activePersonaId: null,
   setActivePersonaId: (id) => set({ activePersonaId: id }),
 
-  activeTab: 'chat',
+  activeTab: 'room',
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   sidebarOpen: true,

@@ -58,7 +58,7 @@ export function ChatInput({ persona, onSend, onAbort, isStreaming }: ChatInputPr
   };
 
   return (
-    <div className="border-t border-gray-200/40 bg-white/30 p-4 flex-shrink-0">
+    <div className="border-t border-gray-200 bg-white p-4 flex-shrink-0">
       <div className="flex items-end gap-2 max-w-3xl mx-auto">
         <textarea
           ref={textareaRef}

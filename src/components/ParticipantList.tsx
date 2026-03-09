@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app-store';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { LogOut } from 'lucide-react';
 import type { Persona } from '@/lib/types';
+import { accentBg } from '@/lib/utils';
 
 interface ParticipantListProps {
   personas: Persona[];
@@ -34,10 +35,10 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
     <aside
       className={`
         h-full flex-shrink-0 overflow-hidden
-        bg-white/50 backdrop-blur-sm
+        bg-white
         flex flex-col
         transition-all duration-300 ease-in-out
-        ${sidebarOpen ? 'w-[280px] border-r border-gray-200/40' : 'w-0'}
+        ${sidebarOpen ? 'w-[280px] border-r border-gray-200' : 'w-0'}
       `}
     >
       <div className="w-[280px] h-full flex flex-col">
@@ -56,7 +57,7 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
             </div>
           ) : personas.length === 0 ? (
             <div className="p-4 text-center text-gray-400 text-sm">
-              No companions yet.
+              No members yet.
             </div>
           ) : (
             personas.map((persona) => {
@@ -68,7 +69,7 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
                 >
                   <div
                     className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 transition-opacity ${isMuted ? 'opacity-40' : ''}`}
-                    style={{ backgroundColor: persona.accent_color + '15' }}
+                    style={{ backgroundColor: accentBg(persona.accent_color, '15') }}
                   >
                     {persona.emoji}
                   </div>
@@ -92,9 +93,9 @@ export function ParticipantList({ personas, loading }: ParticipantListProps) {
           )}
         </div>
 
-        <div className="px-2 py-3 flex-shrink-0 border-t border-gray-200/40 space-y-2">
+        <div className="px-2 py-3 flex-shrink-0 border-t border-gray-200 space-y-2">
           <p className="text-[11px] text-gray-400 leading-relaxed px-2">
-            Room conversations are not saved to companion memories.
+            Get to know members individually to have better conversations in the room.
           </p>
           <button
             onClick={handleSignOut}

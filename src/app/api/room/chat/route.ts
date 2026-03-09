@@ -1,19 +1,40 @@
+import { streamText } from 'ai';
 import { createServerClient } from '@/lib/supabase/server';
 import { getAuthUser, userIdField } from '@/lib/auth';
-import { getAnthropicClient } from '@/lib/anthropic';
-import { MODEL_NAME } from '@/lib/constants';
+import { getModel } from '@/lib/ai';
 import { estimateTokens } from '@/lib/tokens';
+import { resolveSystemPrompt } from '@/lib/default-personas';
 import type { Persona, RoomStreamEvent } from '@/lib/types';
 
-const ROOM_MAX_RESPONSE_TOKENS = 300;
+const ROOM_MAX_RESPONSE_TOKENS = 500;
 const ROOM_AVAILABLE_TOKENS = 60000;
 
 const PERSONA_TEMPERATURES: Record<string, number> = {
-  'Sol': 0.3,
   'Rex': 0.5,
-  'Mira': 0.7,
-  'Mean guy': 0.9,
-  'Atlas': 0.8,
+  'Sol': 0.6,
+  'Mira': 0.9,
+};
+
+// Generous safety-net limits — actual length is guided by the system prompt
+const PERSONA_ROOM_TOKENS: Record<string, number> = {
+  'Rex': 200,
+  'Sol': 350,
+  'Mira': 500,
+};
+
+const PERSONA_LENGTH_GUIDE: Record<string, { blind: string; normal: string }> = {
+  'Rex': {
+    blind: 'Respond in exactly ONE sentence. Stop after the period.',
+    normal: 'Respond in exactly ONE sentence. Stop after the period.',
+  },
+  'Sol': {
+    blind: 'Respond in ONE sentence only. Maximum 25 words / 150 characters. Do not write more than one sentence.',
+    normal: 'Respond in 1–2 sentences only. Maximum 40 words / 250 characters. Do not write more than two sentences.',
+  },
+  'Mira': {
+    blind: 'Respond in 1–2 sentences only. Maximum 40 words / 250 characters. Do not write more than two sentences.',
+    normal: 'Respond in 2–3 sentences only. Maximum 60 words / 400 characters. Do not write more than three sentences.',
+  },
 };
 
 function delay(ms: number): Promise<void> {
@@ -59,29 +80,51 @@ function cleanPersonaResponse(
 ): string {
   let cleaned = response;
 
-  // Strip own [Name]: prefix at the start
-  const ownPrefixRe = new RegExp(`^\\[${currentPersona.name}\\]:\\s*`, 'i');
+  // Strip own [Name]: or "Name here—" prefix at the start
+  const ownPrefixRe = new RegExp(`^\\[?${currentPersona.name}\\]?[:\\s]*here[—–-]\\s*|^\\[${currentPersona.name}\\]:\\s*`, 'i');
   cleaned = cleaned.replace(ownPrefixRe, '');
 
   // Strip XML-style tags
   cleaned = cleaned.replace(/<message from="[^"]*">\n?/g, '');
   cleaned = cleaned.replace(/\n?<\/message>/g, '');
 
-  // Truncate at the first occurrence of another persona's name being "spoken as"
-  // This catches patterns like: "Rex:", "[Rex]:", "🔮Mira", "⚡Dash", etc.
-  const otherPersonas = allPersonas.filter((p) => p.id !== currentPersona.id);
-  for (const p of otherPersonas) {
-    // Match Name: at start of a line, or [Name]:, or emoji+Name patterns
+  // Strip Grok internal reasoning artifacts
+  cleaned = cleaned.replace(/<\|vq_\d+\|>\s*/g, '');
+  cleaned = cleaned.replace(/<query_has_boxed>\s*\w+\s*<\/query_has_boxed>\s*/g, '');
+  cleaned = cleaned.replace(/<\|?[a-z_]+\|?>\s*/gi, '');
+
+  // Truncate at the first occurrence of ANY persona's name being "spoken as"
+  // (including the current persona talking to itself in third person)
+  // This catches patterns like: "Rex:", "[Rex]:", "🔮Mira", "Rex, you're..." etc.
+  for (const p of allPersonas) {
     const patterns = [
       new RegExp(`\\n${p.emoji}\\s*${p.name}`, 'i'),
       new RegExp(`\\n\\[${p.name}\\]:`, 'i'),
       new RegExp(`\\n${p.name}:\\s`, 'i'),
+      new RegExp(`\\n${p.name},\\s`, 'i'),  // "Rex, you're hedging..."
     ];
     for (const pat of patterns) {
       const match = cleaned.search(pat);
       if (match !== -1) {
         cleaned = cleaned.substring(0, match);
       }
+    }
+  }
+
+  // Detect repetition loops — keep only the first sentence if the rest is repeating
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length > 2) {
+    const first = sentences[0].toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const repeats = sentences.slice(1).filter((s) => {
+      const norm = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      // Check if subsequent sentences share >60% of words with the first
+      const firstWords = new Set(first.split(/\s+/));
+      const sWords = norm.split(/\s+/);
+      const overlap = sWords.filter((w) => firstWords.has(w)).length;
+      return sWords.length > 0 && overlap / sWords.length > 0.6;
+    });
+    if (repeats.length >= 2) {
+      cleaned = sentences[0];
     }
   }
 
@@ -92,35 +135,52 @@ function buildRoomSystemPrompt(
   persona: Persona,
   allPersonas: Persona[],
   isFollowUp: boolean,
-  forceRespond: boolean
+  forceRespond: boolean,
+  isBlindRound: boolean = false
 ): string {
   const otherNames = allPersonas
     .filter((p) => p.id !== persona.id)
     .map((p) => `${p.emoji} ${p.name}`)
     .join(', ');
 
-  let prompt = `## Your Identity\n${persona.system_prompt}\n\n`;
+  let prompt = `## Your Identity\n${resolveSystemPrompt(persona)}\n\n`;
 
   if (persona.memory_summary) {
     prompt += `## Private Memory\nHere is what you know about the user from your private conversations:\n\n${persona.memory_summary}\n\n`;
   }
 
   prompt += `## Group Discussion Context\n`;
-  prompt += `You are in a group discussion with the user and these other companions: ${otherNames}.\n`;
+  prompt += `You are in a group discussion with the user and these other members: ${otherNames}.\n`;
+  if (persona.name === 'Rex') {
+    prompt += `When other members reach similar conclusions, find the weakness in their thinking. You're here to stress-test, not agree.\n`;
+  }
   prompt += `IMPORTANT: You are ONLY ${persona.name}. Respond ONLY as yourself. NEVER generate text on behalf of other personas. Do NOT prefix your response with your name or anyone else's name (e.g. no "[${persona.name}]:" or "[OtherName]:"). Just write your response directly — attribution is handled by the system.\n`;
-  prompt += `Keep your response very short — 1 to 2 sentences max. This is a quick group chat, not a monologue.\n`;
-  prompt += `Do NOT agree with or rephrase what another persona just said. If you agree, pass. Only respond if you have a genuinely different angle.\n`;
-  prompt += `You can reference other personas by name when responding to their points.\n`;
 
-  if (!forceRespond) {
-    prompt += `If you have nothing meaningful to add, respond with just the word "pass" (nothing else) to skip your turn.\n`;
-  } else {
+  if (isBlindRound) {
+    prompt += `This is a quick blind round where each member responds independently.\n`;
     prompt += `You must respond to this message — do not pass.\n`;
+  } else {
+    prompt += `Do NOT agree with or rephrase what another persona just said. If you agree, pass. Only respond if you have a genuinely different angle.\n`;
+    prompt += `You can reference other personas by name when responding to their points.\n`;
+
+    if (!forceRespond) {
+      prompt += `If you have nothing meaningful to add, respond with just the word "pass" (nothing else) to skip your turn.\n`;
+    } else {
+      prompt += `You must respond to this message — do not pass.\n`;
+    }
   }
 
   if (isFollowUp) {
-    prompt += `\n## Follow-Up Instructions\nRespond to or build on something one of the other personas just said. Do not repeat your earlier point. One sentence only.\n`;
+    prompt += `\n## Follow-Up Instructions\nYou just read the other members' responses. Pick ONE response you either agree or disagree with. Name the member, say whether you agree or disagree, and explain why in your own voice. Be specific about what they said and what you think about it.\n`;
   }
+
+  // Length guide goes LAST so it's the final instruction before generation
+  const lengthGuide = PERSONA_LENGTH_GUIDE[persona.name];
+  const guide = isBlindRound
+    ? lengthGuide?.blind ?? 'Keep your response to ONE sentence.'
+    : lengthGuide?.normal ?? 'Keep your response very short — 1 to 2 sentences max.';
+
+  prompt += `\n## Response Length\n${guide} No bullet points, no lists, no headers. Plain conversational text only.\n`;
 
   return prompt;
 }
@@ -131,16 +191,18 @@ interface RoomHistoryMsg {
   persona_name?: string | null;
 }
 
-function buildAnthropicMessages(
+function buildApiMessages(
   history: RoomHistoryMsg[],
   turnResponses: TurnResponse[],
-  userMessage: string
+  userMessage: string,
+  isFollowUp: boolean = false
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
   // Convert room history — keep each assistant message as a separate exchange
   // Persona attribution is only in the system prompt context, not in the content
   for (const msg of history) {
+    if (!msg.content || msg.content.trim() === '') continue;
     if (messages.length > 0 && messages[messages.length - 1].role === msg.role) {
       messages[messages.length - 1].content += '\n\n' + msg.content;
     } else {
@@ -152,10 +214,18 @@ function buildAnthropicMessages(
   let fullUserMessage = userMessage;
 
   if (turnResponses.length > 0) {
-    const context = turnResponses
-      .map((r) => `${r.name}: "${r.content}"`)
-      .join('\n\n');
-    fullUserMessage += `\n\n[Other companions have already responded to this message:]\n${context}\n\n[It is now your turn. Write only your own response.]`;
+    if (isFollowUp) {
+      // For follow-ups, show all responses and ask the persona to react to one
+      const context = turnResponses
+        .map((r) => `${r.name}: "${r.content}"`)
+        .join('\n\n');
+      fullUserMessage += `\n\n[Here's what the other members said:]\n${context}\n\n[Pick ONE of these responses. Say whether you agree or disagree with it, and why.]`;
+    } else {
+      const context = turnResponses
+        .map((r) => `${r.name}: "${r.content}"`)
+        .join('\n\n');
+      fullUserMessage += `\n\n[The following responses are from OTHER members — not you. Do not repeat, claim, or rephrase their words as your own.]\n${context}\n\n[Now respond as yourself with a DIFFERENT perspective. Do not echo what was already said.]`;
+    }
   }
 
   // Add the user message
@@ -184,58 +254,97 @@ function applyRoomWindow(
     tokenCount += msgTokens;
   }
 
-  return messages.slice(cutoffIndex);
+  return messages.slice(cutoffIndex).filter((m) => m.content && m.content.trim() !== '');
+}
+
+/** Strip Grok internal tokens from a streaming chunk, buffering partial `<` tags */
+function stripStreamArtifacts(text: string, tagBuffer: { partial: string }): string {
+  let input = tagBuffer.partial + text;
+  tagBuffer.partial = '';
+
+  // Strip complete tags: <|token|>, <tag>...</tag>, etc.
+  input = input.replace(/<\|[^|>]*\|>/g, '');
+  input = input.replace(/<query_has_boxed>\s*\w+\s*<\/query_has_boxed>/g, '');
+  input = input.replace(/<[a-z_/][^>]*>/gi, '');
+
+  // If input ends with an incomplete `<`, buffer it for the next chunk
+  const lastOpen = input.lastIndexOf('<');
+  if (lastOpen !== -1 && !input.slice(lastOpen).includes('>')) {
+    tagBuffer.partial = input.slice(lastOpen);
+    input = input.slice(0, lastOpen);
+  }
+
+  return input;
 }
 
 async function streamPersonaResponse(
-  anthropic: ReturnType<typeof getAnthropicClient>,
+  personaName: string,
   systemPrompt: string,
   apiMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
   personaId: string,
-  personaName: string,
   emit: (event: RoomStreamEvent) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  options?: { suppressPass?: boolean }
 ): Promise<string> {
   const temperature = PERSONA_TEMPERATURES[personaName] ?? 0.5;
-  const stream = anthropic.messages.stream({
-    model: MODEL_NAME,
-    max_tokens: ROOM_MAX_RESPONSE_TOKENS,
+  const suppressPass = options?.suppressPass ?? false;
+  const model = getModel(personaName);
+
+  const result = streamText({
+    model,
+    maxOutputTokens: PERSONA_ROOM_TOKENS[personaName] ?? ROOM_MAX_RESPONSE_TOKENS,
     temperature,
     system: systemPrompt,
     messages: apiMessages,
+    abortSignal: signal,
   });
 
   let fullResponse = '';
+  let passBuffer = '';
+  let passFlushed = false;
+  const tagBuffer = { partial: '' };
 
-  return new Promise<string>((resolve, reject) => {
-    const onAbort = () => {
-      stream.abort();
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
+  for await (const chunk of result.textStream) {
+    fullResponse += chunk;
 
-    if (signal.aborted) {
-      stream.abort();
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
+    // Strip Grok artifacts before emitting to client
+    const cleaned = stripStreamArtifacts(chunk, tagBuffer);
+    if (!cleaned) continue;
+
+    // When suppressPass is active, buffer initial text to detect "pass"
+    // before showing anything to the user
+    if (!suppressPass || passFlushed) {
+      emit({ type: 'text_delta', persona_id: personaId, text: cleaned });
+      continue;
     }
 
-    signal.addEventListener('abort', onAbort, { once: true });
+    passBuffer += cleaned;
+    if (passBuffer.length > 10) {
+      // Definitely not just "pass" — flush buffer and stream normally
+      emit({ type: 'text_delta', persona_id: personaId, text: passBuffer });
+      passBuffer = '';
+      passFlushed = true;
+    }
+  }
 
-    stream.on('text', (text) => {
-      fullResponse += text;
-      emit({ type: 'text_delta', persona_id: personaId, text });
-    });
+  // Flush any remaining tag buffer content (incomplete tag at end of stream)
+  if (tagBuffer.partial) {
+    const remaining = tagBuffer.partial;
+    tagBuffer.partial = '';
+    if (!suppressPass || passFlushed) {
+      emit({ type: 'text_delta', persona_id: personaId, text: remaining });
+    } else {
+      passBuffer += remaining;
+    }
+    fullResponse += '';  // already counted
+  }
 
-    stream.on('end', () => {
-      signal.removeEventListener('abort', onAbort);
-      resolve(fullResponse);
-    });
+  // Flush remaining buffer if it wasn't a pass
+  if (suppressPass && !passFlushed && passBuffer.length > 0 && !isPass(fullResponse)) {
+    emit({ type: 'text_delta', persona_id: personaId, text: passBuffer });
+  }
 
-    stream.on('error', (error) => {
-      signal.removeEventListener('abort', onAbort);
-      reject(error);
-    });
-  });
+  return fullResponse;
 }
 
 export async function POST(req: Request) {
@@ -258,8 +367,6 @@ export async function POST(req: Request) {
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const anthropic = getAnthropicClient();
 
     // 1. Save user message
     await supabase
@@ -306,7 +413,7 @@ export async function POST(req: Request) {
     // 4. Parse @-mentions and filter muted personas
     const mentions = parseMentions(message, personas as Persona[]);
     const activePersonas = (personas as Persona[]).filter((p) => !mutedSet.has(p.id));
-    const MAX_INITIAL_RESPONDERS = 3;
+    const MAX_INITIAL_RESPONDERS = 2;
     const respondingPersonas: Persona[] =
       mentions.length > 0
         ? activePersonas.filter((p) =>
@@ -359,22 +466,24 @@ export async function POST(req: Request) {
               persona,
               personas as Persona[],
               false,
-              allOthersPassed
+              true,
+              true // blind round
             );
 
+            // Blind round: each persona responds independently (no visibility into others' responses)
             const apiMessages = applyRoomWindow(
-              buildAnthropicMessages(history, turnResponses, message),
+              buildApiMessages(history, [], message),
               ROOM_AVAILABLE_TOKENS
             );
 
             const rawResponse = await streamPersonaResponse(
-              anthropic,
+              persona.name,
               systemPrompt,
               apiMessages,
               persona.id,
-              persona.name,
               emit,
-              controller.signal
+              controller.signal,
+              { suppressPass: true }
             );
             const response = cleanPersonaResponse(rawResponse, persona, personas as Persona[]);
 
@@ -401,11 +510,10 @@ export async function POST(req: Request) {
               });
 
               const rawForced = await streamPersonaResponse(
-                anthropic,
+                persona.name,
                 forcePrompt,
                 apiMessages,
                 persona.id,
-                persona.name,
                 emit,
                 controller.signal
               );
@@ -468,72 +576,59 @@ export async function POST(req: Request) {
             !controller.signal.aborted &&
             mentions.length === 0 &&
             turnResponses.length >= 2 &&
-            Math.random() < 0.5
+            false // follow-up disabled for now
           ) {
             emit({ type: 'followup_start' });
 
-            // Get the last persona who responded — exclude them from being first follow-up
-            const lastResponderId = turnResponses[turnResponses.length - 1].persona_id;
-            const nonPassIds = turnResponses.map((r) => r.persona_id);
-            const eligibleForFirst = (personas as Persona[]).filter(
-              (p) => nonPassIds.includes(p.id) && p.id !== lastResponderId
-            );
-            const restCandidates = (personas as Persona[]).filter(
-              (p) => nonPassIds.includes(p.id) && p.id === lastResponderId
-            );
+            // Any active persona can do the follow-up —
+            // they react to the responses from this round.
+            const candidates = shuffleArray(activePersonas);
 
-            // First pick from non-last-responder, then append the last responder
-            const candidates = [
-              ...shuffleArray(eligibleForFirst),
-              ...shuffleArray(restCandidates),
-            ];
+            const followupPersona = candidates[0];
+            if (followupPersona) {
+              // Show them the OTHER responses (exclude their own if they responded)
+              const othersResponses = turnResponses.filter(
+                (r) => r.persona_id !== followupPersona.id
+              );
 
-            const followupCount = 1;
-            const followupPersonas = candidates.slice(
-              0,
-              Math.min(followupCount, candidates.length)
-            );
-
-            for (const persona of followupPersonas) {
-              if (controller.signal.aborted) break;
-
+              if (!controller.signal.aborted && othersResponses.length > 0) {
               // Delay before follow-up
               await delay(1000 + Math.random() * 500);
 
               emit({
                 type: 'persona_start',
-                persona_id: persona.id,
-                persona_name: persona.name,
-                persona_emoji: persona.emoji,
+                persona_id: followupPersona.id,
+                persona_name: followupPersona.name,
+                persona_emoji: followupPersona.emoji,
               });
 
               const systemPrompt = buildRoomSystemPrompt(
-                persona,
+                followupPersona,
                 personas as Persona[],
                 true,
                 true // follow-ups don't get pass option
               );
 
+              // Pass the other personas' responses as context
               const apiMessages = applyRoomWindow(
-                buildAnthropicMessages(history, turnResponses, message),
+                buildApiMessages(history, othersResponses, message, true),
                 ROOM_AVAILABLE_TOKENS
               );
 
               const rawFollowup = await streamPersonaResponse(
-                anthropic,
+                followupPersona.name,
                 systemPrompt,
                 apiMessages,
-                persona.id,
-                persona.name,
+                followupPersona.id,
                 emit,
                 controller.signal
               );
-              const response = cleanPersonaResponse(rawFollowup, persona, personas as Persona[]);
+              const response = cleanPersonaResponse(rawFollowup, followupPersona, personas as Persona[]);
 
               const { data: saved } = await supabase
                 .from('room_messages')
                 .insert({
-                  persona_id: persona.id,
+                  persona_id: followupPersona.id,
                   role: 'assistant',
                   content: response,
                   ...userIdField(user),
@@ -543,15 +638,16 @@ export async function POST(req: Request) {
 
               emit({
                 type: 'persona_complete',
-                persona_id: persona.id,
+                persona_id: followupPersona.id,
                 message_id: saved?.id,
               });
 
               turnResponses.push({
-                persona_id: persona.id,
-                name: persona.name,
+                persona_id: followupPersona.id,
+                name: followupPersona.name,
                 content: response,
               });
+              }
             }
           }
 

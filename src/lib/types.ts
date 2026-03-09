@@ -13,6 +13,7 @@ export interface Persona {
   last_message_content?: string | null;
   last_message_at?: string | null;
   last_message_role?: string | null;
+  total_characters?: number;
 }
 
 export interface Message {

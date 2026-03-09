@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Companions",
+  title: "AI Members",
   description: "Persistent conversations with AI personas",
 };
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Persona } from '@/lib/types';
+import { accentBg } from '@/lib/utils';
 
 interface RoomInputProps {
   personas: Persona[];
@@ -144,7 +145,7 @@ export function RoomInput({ personas, onSend, onAbort, isStreaming }: RoomInputP
   };
 
   return (
-    <div className="border-t border-gray-200/40 bg-white/30 p-4 flex-shrink-0">
+    <div className="border-t border-gray-200 bg-white p-4 flex-shrink-0">
       <div className="relative max-w-3xl mx-auto">
         {/* @-mention dropdown */}
         {showMentions && filteredPersonas.length > 0 && (
@@ -161,7 +162,7 @@ export function RoomInput({ personas, onSend, onAbort, isStreaming }: RoomInputP
               >
                 <span
                   className="w-6 h-6 rounded-md flex items-center justify-center text-xs"
-                  style={{ backgroundColor: p.accent_color + '15' }}
+                  style={{ backgroundColor: accentBg(p.accent_color, '15') }}
                 >
                   {p.emoji}
                 </span>

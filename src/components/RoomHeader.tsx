@@ -1,6 +1,7 @@
 'use client';
 
 import type { Persona } from '@/lib/types';
+import { accentBg } from '@/lib/utils';
 
 interface RoomHeaderProps {
   personas: Persona[];
@@ -9,7 +10,7 @@ interface RoomHeaderProps {
 
 export function RoomHeader({ personas, topic }: RoomHeaderProps) {
   return (
-    <div className="border-b border-gray-200/40 bg-white/30 px-4 py-3 flex-shrink-0">
+    <div className="border-b border-gray-200 bg-white px-4 py-3 flex-shrink-0">
       <div className="flex items-center gap-3">
         {/* Persona avatars */}
         <div className="flex -space-x-1.5">
@@ -17,7 +18,7 @@ export function RoomHeader({ personas, topic }: RoomHeaderProps) {
             <div
               key={p.id}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-sm ring-2 ring-white/80"
-              style={{ backgroundColor: p.accent_color + '20' }}
+              style={{ backgroundColor: accentBg(p.accent_color, '20') }}
               title={p.name}
             >
               {p.emoji}

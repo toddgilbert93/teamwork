@@ -4,6 +4,7 @@ import { useRef, useEffect } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { StreamingIndicator } from './StreamingIndicator';
 import type { Persona, Message } from '@/lib/types';
+import { accentBg } from '@/lib/utils';
 
 interface MessageListProps {
   messages: Message[];
@@ -41,7 +42,7 @@ export function MessageList({ messages, persona, isStreaming, streamingText, loa
         <div className="flex flex-col items-center justify-center h-full text-center">
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
-            style={{ backgroundColor: persona.accent_color + '15' }}
+            style={{ backgroundColor: accentBg(persona.accent_color, '15') }}
           >
             {persona.emoji}
           </div>
@@ -63,7 +64,7 @@ export function MessageList({ messages, persona, isStreaming, streamingText, loa
         <div className="flex justify-start">
           <div
             className="max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 text-sm"
-            style={{ backgroundColor: persona.accent_color + '10' }}
+            style={{ backgroundColor: accentBg(persona.accent_color, '10') }}
           >
             {streamingText ? (
               <div className="prose-message whitespace-pre-wrap">{streamingText}</div>

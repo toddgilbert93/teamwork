@@ -58,7 +58,7 @@ function LoginContent() {
           Polyphony
         </h1>
         <p className="text-sm text-gray-500">
-          Your AI companions, always here.
+          Your AI members, always here.
         </p>
       </div>
 

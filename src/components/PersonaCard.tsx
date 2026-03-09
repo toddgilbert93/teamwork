@@ -1,7 +1,7 @@
 'use client';
 
 import type { Persona } from '@/lib/types';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, accentBg } from '@/lib/utils';
 
 interface PersonaCardProps {
   persona: Persona;
@@ -29,7 +29,7 @@ export function PersonaCard({ persona, isActive, onClick }: PersonaCardProps) {
       {/* Emoji avatar */}
       <div
         className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-        style={{ backgroundColor: persona.accent_color + '15' }}
+        style={{ backgroundColor: accentBg(persona.accent_color, '15') }}
       >
         {persona.emoji}
       </div>

@@ -26,3 +26,17 @@ export function truncate(str: string, maxLen: number): string {
   if (str.length <= maxLen) return str;
   return str.slice(0, maxLen).trimEnd() + '...';
 }
+
+/**
+ * Blend a hex color at a given hex opacity against white,
+ * returning a fully opaque hex color.
+ * e.g. accentBg('#6366F1', '15') → '#EEEEFF'
+ */
+export function accentBg(hex: string, hexOpacity: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const a = parseInt(hexOpacity, 16) / 255;
+  const blend = (c: number) => Math.round(c * a + 255 * (1 - a));
+  return `#${blend(r).toString(16).padStart(2, '0')}${blend(g).toString(16).padStart(2, '0')}${blend(b).toString(16).padStart(2, '0')}`;
+}

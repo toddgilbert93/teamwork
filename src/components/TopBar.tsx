@@ -1,18 +1,18 @@
 'use client';
 
 import { useAppStore } from '@/stores/app-store';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, Plus } from 'lucide-react';
 
 const TABS = [
-  { key: 'chat', label: 'Chat' },
   { key: 'room', label: 'Room' },
+  { key: 'chat', label: 'Chat' },
 ] as const;
 
 export function TopBar() {
-  const { activeTab, setActiveTab, toggleSidebar } = useAppStore();
+  const { activeTab, setActiveTab, toggleSidebar, setShowNewPersonaForm } = useAppStore();
 
   return (
-    <div className="flex items-center px-3 py-2 border-b border-gray-200/40 bg-white/30 flex-shrink-0">
+    <div className="flex items-center px-3 py-2 border-b border-gray-200/50 bg-white/15 flex-shrink-0">
       {/* Sidebar toggle */}
       <button
         onClick={toggleSidebar}
@@ -42,8 +42,13 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* Spacer to balance the sidebar toggle */}
-      <div className="w-8" />
+      {/* New member */}
+      <button
+        onClick={() => setShowNewPersonaForm(true)}
+        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.04] text-gray-500 transition-colors"
+      >
+        <Plus className="w-[18px] h-[18px]" />
+      </button>
     </div>
   );
 }

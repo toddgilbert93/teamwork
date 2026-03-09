@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getAuthUser, userIdField } from '@/lib/auth';
-import { DEFAULT_PERSONAS } from '@/lib/default-personas';
+import { DEFAULT_PERSONAS, resolveSystemPrompt } from '@/lib/default-personas';
 
 export async function GET() {
   const supabase = await createServerClient();
@@ -44,22 +44,26 @@ export async function GET() {
         .order('created_at', { ascending: false })
     : { data: [] };
 
-  // Group by persona_id, take first (most recent) for each
+  // Group by persona_id, take first (most recent) for each, and sum total characters
   const lastMessageMap = new Map<string, { content: string; created_at: string; role: string }>();
+  const totalCharsMap = new Map<string, number>();
   for (const msg of lastMessages || []) {
     if (!lastMessageMap.has(msg.persona_id)) {
       lastMessageMap.set(msg.persona_id, msg);
     }
+    totalCharsMap.set(msg.persona_id, (totalCharsMap.get(msg.persona_id) || 0) + (msg.content?.length || 0));
   }
 
-  // Merge into persona objects
+  // Merge into persona objects, resolving system prompts from code for defaults
   const result = (personas || []).map((p: Record<string, unknown>) => {
     const last = lastMessageMap.get(p.id as string);
     return {
       ...p,
+      system_prompt: resolveSystemPrompt(p as { is_default: boolean; name: string; system_prompt: string }),
       last_message_content: last?.content ?? null,
       last_message_at: last?.created_at ?? null,
       last_message_role: last?.role ?? null,
+      total_characters: totalCharsMap.get(p.id as string) ?? 0,
     };
   });
 
@@ -118,9 +122,9 @@ export async function POST(req: Request) {
 function generateSystemPrompt(name: string, personality: string): string {
   return `You are ${name} — ${personality}
 
-You are one of several AI companions this person talks to, but you have absolutely no knowledge of their other conversations. You only know what they've shared with you directly.
+You are one of several AI members this person talks to, but you have absolutely no knowledge of their other conversations. You only know what they've shared with you directly.
 
 Build a real relationship over time. Remember what they've told you. Reference past conversations naturally. Notice patterns in what they share. You're not a fresh chatbot every time — you're a consistent presence in their life.
 
-Keep responses conversational and concise by default. Go deeper when the topic warrants it, but don't over-explain or use bullet points unless asked. Have genuine opinions. Push back when you disagree. You're not here to just validate — you're here to be a real companion.`;
+Keep responses conversational and concise by default. Go deeper when the topic warrants it, but don't over-explain or use bullet points unless asked. Have genuine opinions. Push back when you disagree. You're not here to just validate — you're here to be a real member.`;
 }
