@@ -23,7 +23,7 @@ export async function GET() {
 
   // Seed defaults for new users who have no personas yet
   if (!personas || personas.length === 0) {
-    const rows = DEFAULT_PERSONAS.map((p) => ({ ...p, user_id: user.id }));
+    const rows = DEFAULT_PERSONAS.map(({ description, ...p }) => ({ ...p, user_id: user.id }));
     const { data: seeded, error: seedErr } = await supabase
       .from('personas')
       .insert(rows)
